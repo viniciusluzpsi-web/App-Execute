@@ -85,6 +85,24 @@
         .animate-border-success {
             animation: border-success 1s ease-out forwards;
         }
+
+        /* Sparkle/Particle Animations */
+        @keyframes particle-out {
+            0% { transform: translate(0, 0) scale(0); opacity: 1; }
+            100% { transform: translate(var(--dx), var(--dy)) scale(1.5); opacity: 0; }
+        }
+        .animate-particle {
+            animation: particle-out 0.8s cubic-bezier(0, .9, .57, 1) forwards;
+        }
+
+        @keyframes card-win-glow {
+            0% { border-color: rgba(249, 115, 22, 0.2); background-color: rgba(249, 115, 22, 0); }
+            30% { border-color: rgba(249, 115, 22, 0.8); background-color: rgba(249, 115, 22, 0.1); }
+            100% { border-color: rgba(249, 115, 22, 0.2); background-color: rgba(249, 115, 22, 0); }
+        }
+        .animate-card-win {
+            animation: card-win-glow 1s ease-out forwards;
+        }
     </style>
 <script type="importmap">
 {

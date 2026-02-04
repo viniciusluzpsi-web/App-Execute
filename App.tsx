@@ -6,7 +6,7 @@ import {
   BrainCircuit, Anchor, Target, Flame, Sparkles, 
   Repeat, Award, TrendingUp, Sun, Moon, CheckCircle2,
   LogOut, User as UserIcon, Mail, Lock, ArrowRight, UserCheck,
-  CalendarDays, Trash2
+  CalendarDays, Trash2, Star
 } from 'lucide-react';
 import { Priority, Task, Habit, IdentityBoost, PanicSolution, RecurringTask, Frequency, User } from './types';
 import { geminiService } from './services/geminiService';
@@ -28,6 +28,35 @@ const SynapseLogo = ({ className = "" }: { className?: string }) => (
     <circle cx="26" cy="6" r="2" fill="#ef4444" />
   </svg>
 );
+
+const SparkleBurst = () => {
+  const particles = Array.from({ length: 12 });
+  return (
+    <div className="absolute inset-0 pointer-events-none z-20 flex items-center justify-center">
+      {particles.map((_, i) => {
+        const angle = (i / particles.length) * 360;
+        const dist = 50 + Math.random() * 50;
+        const dx = Math.cos((angle * Math.PI) / 180) * dist;
+        const dy = Math.sin((angle * Math.PI) / 180) * dist;
+        const size = 4 + Math.random() * 8;
+        const color = i % 2 === 0 ? '#f97316' : '#fbbf24'; // Orange or Amber
+        return (
+          <div
+            key={i}
+            className="absolute animate-particle rounded-full"
+            style={{
+              width: size,
+              height: size,
+              backgroundColor: color,
+              '--dx': `${dx}px`,
+              '--dy': `${dy}px`,
+            } as any}
+          />
+        );
+      })}
+    </div>
+  );
+};
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -58,6 +87,7 @@ const App: React.FC = () => {
   const [isRescuing, setIsRescuing] = useState(false);
   const [isDecomposing, setIsDecomposing] = useState(false);
   const [justCompletedId, setJustCompletedId] = useState<string | null>(null);
+  const [sparklingId, setSparklingId] = useState<string | null>(null);
   const [newTaskText, setNewTaskText] = useState("");
   const [obstacleInput, setObstacleInput] = useState("");
   const [showHabitForm, setShowHabitForm] = useState(false);
@@ -270,6 +300,13 @@ const App: React.FC = () => {
       setTasks(prev => prev.map(t => t.id === id ? { ...t, completed: false } : t));
       setPoints(prev => Math.max(0, prev - 15));
     }
+  };
+
+  const handleHabitCheck = (id: string) => {
+    setSparklingId(id);
+    setTimeout(() => setSparklingId(null), 1000);
+    setHabits(prev => prev.map(h => h.id === id ? { ...h, streak: h.streak + 1 } : h));
+    setPoints(p => p + 25);
   };
 
   const neuroLevel = useMemo(() => {
@@ -562,7 +599,8 @@ const App: React.FC = () => {
                   <h3 className="text-xs font-black uppercase flex items-center gap-2 text-slate-500"><Flame size={14}/> Seus Hábitos</h3>
                   <div className="grid grid-cols-1 gap-3">
                     {habits.map(habit => (
-                      <div key={habit.id} className={`group border p-6 rounded-[28px] flex flex-col transition-all ${isDark ? 'bg-[#0a1128] border-slate-800 hover:border-orange-500/30' : 'bg-white border-slate-200 shadow-sm'}`}>
+                      <div key={habit.id} className={`relative group border p-6 rounded-[28px] flex flex-col transition-all overflow-hidden ${isDark ? 'bg-[#0a1128] border-slate-800 hover:border-orange-500/30' : 'bg-white border-slate-200 shadow-sm'} ${sparklingId === habit.id ? 'animate-card-win' : ''}`}>
+                        {sparklingId === habit.id && <SparkleBurst />}
                         <div className="flex justify-between items-start">
                           <div>
                             <h4 className="font-black text-lg">{habit.text}</h4>
@@ -579,7 +617,13 @@ const App: React.FC = () => {
                              <Flame className="text-orange-500" size={16} />
                              <span className="text-xs font-black">{habit.streak} dias</span>
                           </div>
-                          <button onClick={() => { setHabits(habits.map(h => h.id === habit.id ? {...h, streak: h.streak + 1} : h)); setPoints(p => p + 25); }} className="px-6 py-2 bg-orange-600/10 text-orange-500 border border-orange-500/20 rounded-xl text-[10px] font-black uppercase hover:bg-orange-600 hover:text-white transition-all">Check (+25 XP)</button>
+                          <button 
+                            onClick={() => handleHabitCheck(habit.id)} 
+                            className="px-6 py-2 bg-orange-600/10 text-orange-500 border border-orange-500/20 rounded-xl text-[10px] font-black uppercase hover:bg-orange-600 hover:text-white transition-all active:scale-95 flex items-center gap-2"
+                          >
+                            <Star size={12} className={sparklingId === habit.id ? 'animate-spin' : ''} />
+                            Check (+25 XP)
+                          </button>
                         </div>
                       </div>
                     ))}
