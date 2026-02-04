@@ -5,7 +5,8 @@ import {
   Plus, X, Trophy, Play, Pause, RotateCcw, 
   BrainCircuit, Anchor, Target, Flame, Sparkles, 
   Repeat, Award, TrendingUp, Sun, Moon, CheckCircle2,
-  LogOut, User as UserIcon, Mail, Lock, ArrowRight
+  LogOut, User as UserIcon, Mail, Lock, ArrowRight, UserCheck,
+  CalendarDays, Trash2
 } from 'lucide-react';
 import { Priority, Task, Habit, IdentityBoost, PanicSolution, RecurringTask, Frequency, User } from './types';
 import { geminiService } from './services/geminiService';
@@ -30,8 +31,12 @@ const SynapseLogo = ({ className = "" }: { className?: string }) => (
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('neuro-session');
-    return saved ? JSON.parse(saved) : null;
+    try {
+      const saved = localStorage.getItem('neuro-session');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
   });
 
   const [activeTab, setActiveTab] = useState<'execute' | 'plan' | 'habits' | 'capture'>('execute');
@@ -58,13 +63,14 @@ const App: React.FC = () => {
   const [showHabitForm, setShowHabitForm] = useState(false);
   const [showRecurringForm, setShowRecurringForm] = useState(false);
   const [newHabit, setNewHabit] = useState({ text: "", anchor: "", tinyAction: "" });
-  const [newRecurring, setNewRecurring] = useState({ text: "", frequency: Frequency.DAILY, priority: Priority.Q2 });
+  const [newRecurring, setNewRecurring] = useState({ text: "", frequency: Frequency.DAILY, priority: Priority.Q2, energy: 'Média' as Task['energy'] });
 
   // Auth States
   const [isRegistering, setIsRegistering] = useState(false);
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authName, setAuthName] = useState("");
+  const [isLoadingAuth, setIsLoadingAuth] = useState(false);
 
   // Load Data for User
   useEffect(() => {
@@ -107,36 +113,87 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [isTimerActive, timeLeft]);
 
+  // Logic to spawn tasks from recurring ones for the selected date
+  useEffect(() => {
+    if (!currentUser || recurringTasks.length === 0) return;
+    
+    setTasks(currentTasks => {
+      let updated = [...currentTasks];
+      let changed = false;
+
+      recurringTasks.forEach(rec => {
+        const alreadyExists = updated.find(t => t.text === rec.text && t.date === selectedDate);
+        if (!alreadyExists) {
+          // Simplificação: apenas cria se for diário por enquanto para não sobrecarregar
+          if (rec.frequency === Frequency.DAILY) {
+            updated.push({
+              id: crypto.randomUUID(),
+              text: rec.text,
+              priority: rec.priority,
+              energy: rec.energy,
+              completed: false,
+              subtasks: [],
+              date: selectedDate,
+              createdAt: Date.now()
+            });
+            changed = true;
+          }
+        }
+      });
+
+      return changed ? updated : currentTasks;
+    });
+  }, [selectedDate, recurringTasks, currentUser]);
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (!authEmail || !authPassword) return;
-    const users = JSON.parse(localStorage.getItem('neuro-users') || '[]');
-    const user = users.find((u: any) => u.email === authEmail && u.password === authPassword);
-    
-    if (user) {
-      const sessionUser = { id: user.id, name: user.name, email: user.email };
-      setCurrentUser(sessionUser);
-      localStorage.setItem('neuro-session', JSON.stringify(sessionUser));
-    } else {
-      alert("Credenciais inválidas");
+    setIsLoadingAuth(true);
+    try {
+      const users = JSON.parse(localStorage.getItem('neuro-users') || '[]');
+      const user = users.find((u: any) => u.email.toLowerCase() === authEmail.toLowerCase() && u.password === authPassword);
+      if (user) {
+        const sessionUser = { id: user.id, name: user.name, email: user.email };
+        localStorage.setItem('neuro-session', JSON.stringify(sessionUser));
+        setCurrentUser(sessionUser);
+      } else {
+        alert("Credenciais não encontradas. Tente cadastrar-se primeiro.");
+      }
+    } catch (err) {
+      console.error("Erro no login:", err);
+    } finally {
+      setIsLoadingAuth(false);
     }
   };
 
   const handleRegister = (e: React.FormEvent) => {
     e.preventDefault();
     if (!authEmail || !authPassword || !authName) return;
-    const users = JSON.parse(localStorage.getItem('neuro-users') || '[]');
-    if (users.find((u: any) => u.email === authEmail)) {
-      alert("Email já cadastrado");
-      return;
+    setIsLoadingAuth(true);
+    try {
+      const users = JSON.parse(localStorage.getItem('neuro-users') || '[]');
+      if (users.find((u: any) => u.email.toLowerCase() === authEmail.toLowerCase())) {
+        alert("Este email já está em uso.");
+        setIsLoadingAuth(false);
+        return;
+      }
+      const newUser = { id: crypto.randomUUID(), name: authName, email: authEmail, password: authPassword };
+      users.push(newUser);
+      localStorage.setItem('neuro-users', JSON.stringify(users));
+      const sessionUser = { id: newUser.id, name: newUser.name, email: newUser.email };
+      localStorage.setItem('neuro-session', JSON.stringify(sessionUser));
+      setCurrentUser(sessionUser);
+    } catch (err) {
+      console.error("Erro no cadastro:", err);
+    } finally {
+      setIsLoadingAuth(false);
     }
-    const newUser = { id: crypto.randomUUID(), name: authName, email: authEmail, password: authPassword };
-    users.push(newUser);
-    localStorage.setItem('neuro-users', JSON.stringify(users));
-    
-    const sessionUser = { id: newUser.id, name: newUser.name, email: newUser.email };
-    setCurrentUser(sessionUser);
-    localStorage.setItem('neuro-session', JSON.stringify(sessionUser));
+  };
+
+  const enterAsGuest = () => {
+    const guestUser = { id: 'guest-session', name: 'Explorador Neural', email: 'visitante@neuro.com' };
+    localStorage.setItem('neuro-session', JSON.stringify(guestUser));
+    setCurrentUser(guestUser);
   };
 
   const handleLogout = () => {
@@ -164,13 +221,7 @@ const App: React.FC = () => {
   }, []);
 
   const dayTasks = useMemo(() => tasks.filter(t => t.date === selectedDate), [tasks, selectedDate]);
-  const neuroLevel = useMemo(() => {
-    if (points < 100) return { title: "Iniciante Neural", next: 100 };
-    if (points < 500) return { title: "Arquiteto de Hábitos", next: 500 };
-    if (points < 1500) return { title: "Mestre da Execução", next: 1500 };
-    return { title: "Ninja da Neuroplasticidade", next: Infinity };
-  }, [points]);
-
+  
   const addTask = () => {
     if (!newTaskText.trim()) return;
     const task: Task = {
@@ -187,13 +238,11 @@ const App: React.FC = () => {
     setNewTaskText("");
   };
 
-  // Define handleDecompose to break down a task into smaller steps using AI.
   const handleDecompose = async (task: Task) => {
     setIsDecomposing(true);
     try {
       const steps = await geminiService.decomposeTask(task.text);
       setTasks(prev => prev.map(t => t.id === task.id ? { ...t, subtasks: steps } : t));
-      // Update selectedTask if it is the one being decomposed
       if (selectedTask?.id === task.id) {
         setSelectedTask({ ...task, subtasks: steps });
       }
@@ -208,21 +257,28 @@ const App: React.FC = () => {
     const task = tasks.find(t => t.id === id);
     if (!task) return;
     const isNowCompleted = !task.completed;
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, completed: isNowCompleted } : t));
-    
     if (isNowCompleted) {
       setJustCompletedId(id);
       setTimeout(() => setJustCompletedId(null), 1200);
       setPoints(prev => prev + 15);
+      setTasks(prev => prev.map(t => t.id === id ? { ...t, completed: true } : t));
       try {
         const boostText = await geminiService.generateIdentityBoost(task.text);
         setIdentityBoost({ text: boostText, taskTitle: task.text });
         setTimeout(() => setIdentityBoost(null), 8000);
       } catch (err) { console.error(err); }
     } else {
+      setTasks(prev => prev.map(t => t.id === id ? { ...t, completed: false } : t));
       setPoints(prev => Math.max(0, prev - 15));
     }
   };
+
+  const neuroLevel = useMemo(() => {
+    if (points < 100) return { title: "Iniciante Neural", next: 100 };
+    if (points < 500) return { title: "Arquiteto de Hábitos", next: 500 };
+    if (points < 1500) return { title: "Mestre da Execução", next: 1500 };
+    return { title: "Ninja da Neuroplasticidade", next: Infinity };
+  }, [points]);
 
   const isDark = theme === 'dark';
 
@@ -235,7 +291,6 @@ const App: React.FC = () => {
             <h1 className={`text-4xl font-black italic tracking-tighter ${isDark ? 'text-orange-500' : 'text-orange-600'}`}>NEUROEXECUTOR</h1>
             <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-2">Gestão Executiva Cerebral</p>
           </div>
-
           <form onSubmit={isRegistering ? handleRegister : handleLogin} className="space-y-4">
             {isRegistering && (
               <div className="relative group">
@@ -251,16 +306,20 @@ const App: React.FC = () => {
               <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-orange-500 transition-colors" size={20} />
               <input required type="password" className={`w-full py-4 pl-12 pr-4 rounded-2xl border outline-none transition-all ${isDark ? 'bg-[#020617] border-slate-800 focus:border-orange-500' : 'bg-slate-50 border-slate-200 focus:border-orange-500'}`} placeholder="Senha" value={authPassword} onChange={e => setAuthPassword(e.target.value)} />
             </div>
-            
-            <button type="submit" className="w-full py-4 bg-orange-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-orange-900/40 flex items-center justify-center gap-3 hover:bg-orange-500 transition-all active:scale-[0.98]">
-              {isRegistering ? "Ativar Neurônios" : "Entrar no Fluxo"}
-              <ArrowRight size={20} />
+            <button type="submit" disabled={isLoadingAuth} className={`w-full py-4 bg-orange-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-orange-900/40 flex items-center justify-center gap-3 hover:bg-orange-500 transition-all active:scale-[0.98] ${isLoadingAuth ? 'opacity-70 cursor-not-allowed' : ''}`}>
+              {isLoadingAuth ? "Carregando..." : (isRegistering ? "Ativar Neurônios" : "Entrar no Fluxo")}
+              {!isLoadingAuth && <ArrowRight size={20} />}
             </button>
           </form>
-
-          <button onClick={() => setIsRegistering(!isRegistering)} className="w-full mt-8 text-center text-xs font-bold text-slate-500 hover:text-orange-500 transition-colors uppercase tracking-wider">
-            {isRegistering ? "Já tenho uma conta neural" : "Criar nova rede executiva"}
-          </button>
+          <div className="mt-8 space-y-3">
+            <button onClick={() => setIsRegistering(!isRegistering)} className="w-full text-center text-xs font-bold text-slate-500 hover:text-orange-500 transition-colors uppercase tracking-wider">
+              {isRegistering ? "Já tenho uma conta neural" : "Criar nova rede executiva"}
+            </button>
+            <div className={`h-px w-full ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`} />
+            <button onClick={enterAsGuest} className="w-full py-3 text-center text-xs font-black text-slate-500 hover:text-orange-500 transition-colors uppercase tracking-widest flex items-center justify-center gap-2">
+              <UserCheck size={16} /> Explorar como Visitante
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -272,8 +331,7 @@ const App: React.FC = () => {
         <div className="hidden md:flex items-center justify-between p-8">
           <div>
             <h1 className={`text-2xl font-black flex items-center gap-3 italic tracking-tight ${isDark ? 'text-orange-500' : 'text-orange-600'}`}>
-              <SynapseLogo />
-              EXECUTE
+              <SynapseLogo /> EXECUTE
             </h1>
             <div className="mt-6 flex items-center gap-3 group">
               <div className="w-10 h-10 rounded-xl bg-orange-600/20 text-orange-500 flex items-center justify-center font-black">
@@ -300,8 +358,7 @@ const App: React.FC = () => {
             {isDark ? "Modo Claro" : "Modo Escuro"}
           </button>
           <button onClick={handleLogout} className="flex items-center gap-4 px-6 py-4 rounded-2xl font-bold text-xs text-red-500 hover:bg-red-500/10 transition-all">
-            <LogOut size={18}/>
-            Encerrar Sessão
+            <LogOut size={18}/> Encerrar Sessão
           </button>
         </div>
       </nav>
@@ -338,18 +395,17 @@ const App: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className={`border rounded-[40px] p-8 min-h-[300px] relative overflow-hidden transition-all duration-500 ${isDark ? 'bg-[#0a1128] border-slate-800' : 'bg-white border-slate-200 shadow-lg'} ${selectedTask && justCompletedId === selectedTask.id ? 'animate-glow-success' : ''}`}>
+                  <div className={`border rounded-[40px] p-8 min-h-[300px] relative overflow-hidden transition-all duration-500 ${isDark ? 'bg-[#0a1128] border-slate-800' : 'bg-white border-slate-200 shadow-lg'} ${selectedTask && justCompletedId === selectedTask.id ? 'animate-glow-success animate-border-success' : ''}`}>
                     {selectedTask && justCompletedId === selectedTask.id && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-green-500/10 pointer-events-none">
-                        <CheckCircle2 size={120} className="text-green-500 animate-check-pop" />
+                      <div className="absolute inset-0 flex items-center justify-center bg-green-500/5 pointer-events-none z-10">
+                        <CheckCircle2 size={80} className="text-green-500 animate-check-pop" />
                       </div>
                     )}
-                    
                     {selectedTask ? (
                       <div className="space-y-6">
                         <div className="flex justify-between items-start">
                           <div>
-                            <h2 className={`text-3xl font-black transition-all ${justCompletedId === selectedTask.id ? 'text-green-500 translate-y-[-4px]' : ''}`}>
+                            <h2 className={`text-3xl font-black transition-all ${justCompletedId === selectedTask.id ? 'animate-text-success' : ''}`}>
                               {selectedTask.text}
                             </h2>
                             <span className="inline-block mt-2 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-orange-600/20 text-orange-400 animate-pulse-orange">
@@ -370,12 +426,8 @@ const App: React.FC = () => {
                             </button>
                           )}
                         </div>
-                        <button 
-                          onClick={() => toggleTask(selectedTask.id)} 
-                          disabled={selectedTask.completed || justCompletedId === selectedTask.id}
-                          className={`w-full py-4 rounded-2xl font-black uppercase tracking-widest transition-all shadow-xl active:scale-[0.98] ${selectedTask.completed || justCompletedId === selectedTask.id ? 'bg-green-600 text-white' : 'bg-orange-600 hover:bg-orange-500 text-white'}`}
-                        >
-                          {justCompletedId === selectedTask.id ? 'Execução Concluída!' : 'Finalizar Execução'}
+                        <button onClick={() => toggleTask(selectedTask.id)} disabled={selectedTask.completed || justCompletedId === selectedTask.id} className={`w-full py-4 rounded-2xl font-black uppercase tracking-widest transition-all shadow-xl active:scale-[0.98] ${selectedTask.completed || justCompletedId === selectedTask.id ? 'bg-green-600 text-white' : 'bg-orange-600 hover:bg-orange-500 text-white'}`}>
+                          {justCompletedId === selectedTask.id ? 'Neuro-vitoria!' : 'Finalizar Execução'}
                         </button>
                       </div>
                     ) : <div className="py-24 text-center opacity-30 text-slate-400"><Anchor size={60} className="mx-auto mb-4"/><p>Selecione uma tarefa</p></div>}
@@ -388,7 +440,7 @@ const App: React.FC = () => {
                     <div className="space-y-2">
                       {dayTasks.filter(t => !t.completed).map(t => (
                         <button key={t.id} onClick={() => setSelectedTask(t)} className={`w-full text-left p-4 rounded-2xl border transition-all relative overflow-hidden ${selectedTask?.id === t.id ? 'bg-orange-600/10 border-orange-500 text-white' : 'border-slate-800 text-slate-500'}`}>
-                          <span className="text-xs font-bold truncate">{t.text}</span>
+                          <span className={`text-xs font-bold truncate ${justCompletedId === t.id ? 'animate-text-success' : ''}`}>{t.text}</span>
                         </button>
                       ))}
                       {dayTasks.filter(t => !t.completed).length === 0 && (
@@ -437,39 +489,103 @@ const App: React.FC = () => {
               </div>
 
               <div className="flex gap-2 justify-end">
-                <button onClick={() => setShowRecurringForm(!showRecurringForm)} className={`px-6 py-3 border rounded-2xl font-bold flex items-center gap-2 transition-all ${showRecurringForm ? 'bg-orange-600 text-white' : 'border-slate-800'}`}> <Repeat size={18}/> Tarefa Fixa </button>
+                <button onClick={() => setShowRecurringForm(!showRecurringForm)} className={`px-6 py-3 border rounded-2xl font-bold flex items-center gap-2 transition-all ${showRecurringForm ? 'bg-orange-600 text-white shadow-glow-orange border-orange-500' : 'border-slate-800'}`}> <Repeat size={18}/> Tarefa Fixa </button>
                 <button onClick={() => setShowHabitForm(!showHabitForm)} className={`px-6 py-3 bg-orange-600 text-white rounded-2xl font-bold flex items-center gap-2 transition-all`}> <Flame size={18}/> Novo Hábito </button>
               </div>
 
+              {showRecurringForm && (
+                <div className={`p-8 border rounded-[32px] animate-in slide-in-from-top duration-300 ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200 shadow-xl'}`}>
+                  <h4 className="font-black uppercase text-sm mb-4">Nova Rotina Recorrente</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <input className={`md:col-span-2 p-4 rounded-xl border outline-none transition-all ${isDark ? 'bg-slate-800 border-slate-700 focus:border-orange-500' : 'bg-slate-50 border-slate-200 focus:border-orange-500'}`} placeholder="Nome da tarefa fixa" value={newRecurring.text} onChange={e => setNewRecurring({...newRecurring, text: e.target.value})} />
+                    <select className={`p-4 rounded-xl border outline-none ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'}`} value={newRecurring.frequency} onChange={e => setNewRecurring({...newRecurring, frequency: e.target.value as Frequency})}>
+                      <option value={Frequency.DAILY}>Todo Dia</option>
+                      <option value={Frequency.WEEKLY}>Semanal</option>
+                      <option value={Frequency.MONTHLY}>Mensal</option>
+                    </select>
+                    <select className={`p-4 rounded-xl border outline-none ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'}`} value={newRecurring.priority} onChange={e => setNewRecurring({...newRecurring, priority: e.target.value as Priority})}>
+                      <option value={Priority.Q1}>Urgente (Q1)</option>
+                      <option value={Priority.Q2}>Importante (Q2)</option>
+                      <option value={Priority.Q3}>Delegar (Q3)</option>
+                    </select>
+                  </div>
+                  <button onClick={() => {
+                    if (!newRecurring.text) return;
+                    setRecurringTasks([...recurringTasks, { id: crypto.randomUUID(), ...newRecurring, completedDates: [] }]);
+                    setNewRecurring({ text: "", frequency: Frequency.DAILY, priority: Priority.Q2, energy: 'Média' });
+                    setShowRecurringForm(false);
+                  }} className="mt-4 w-full py-4 bg-orange-600 text-white rounded-xl font-black uppercase hover:bg-orange-500 transition-all shadow-lg">Ativar Rotina</button>
+                </div>
+              )}
+
               {showHabitForm && (
-                <div className={`p-8 border rounded-[32px] animate-in slide-in-from-top ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200 shadow-xl'}`}>
+                <div className={`p-8 border rounded-[32px] animate-in slide-in-from-top duration-300 ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200 shadow-xl'}`}>
                   <h4 className="font-black uppercase text-sm mb-4">Novo Hábito Atômico</h4>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <input className={`p-4 rounded-xl border ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50'}`} placeholder="O Hábito" value={newHabit.text} onChange={e => setNewHabit({...newHabit, text: e.target.value})} />
-                    <input className={`p-4 rounded-xl border ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50'}`} placeholder="Âncora (Quando...)" value={newHabit.anchor} onChange={e => setNewHabit({...newHabit, anchor: e.target.value})} />
-                    <input className={`p-4 rounded-xl border ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50'}`} placeholder="Micro-ação" value={newHabit.tinyAction} onChange={e => setNewHabit({...newHabit, tinyAction: e.target.value})} />
+                    <input className={`p-4 rounded-xl border outline-none ${isDark ? 'bg-slate-800 border-slate-700 focus:border-orange-500' : 'bg-slate-50 border-slate-200 focus:border-orange-500'}`} placeholder="O Hábito" value={newHabit.text} onChange={e => setNewHabit({...newHabit, text: e.target.value})} />
+                    <input className={`p-4 rounded-xl border outline-none ${isDark ? 'bg-slate-800 border-slate-700 focus:border-orange-500' : 'bg-slate-50 border-slate-200 focus:border-orange-500'}`} placeholder="Âncora (Quando...)" value={newHabit.anchor} onChange={e => setNewHabit({...newHabit, anchor: e.target.value})} />
+                    <input className={`p-4 rounded-xl border outline-none ${isDark ? 'bg-slate-800 border-slate-700 focus:border-orange-500' : 'bg-slate-50 border-slate-200 focus:border-orange-500'}`} placeholder="Micro-ação" value={newHabit.tinyAction} onChange={e => setNewHabit({...newHabit, tinyAction: e.target.value})} />
                   </div>
                   <button onClick={() => {
                     if (!newHabit.text) return;
                     setHabits([...habits, { id: crypto.randomUUID(), ...newHabit, streak: 0, lastCompleted: null }]);
                     setNewHabit({ text: "", anchor: "", tinyAction: "" });
                     setShowHabitForm(false);
-                  }} className="mt-4 w-full py-4 bg-orange-600 text-white rounded-xl font-black uppercase">Implementar</button>
+                  }} className="mt-4 w-full py-4 bg-orange-600 text-white rounded-xl font-black uppercase hover:bg-orange-500 transition-all shadow-lg">Implementar</button>
                 </div>
               )}
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <div className="space-y-4">
+                  <h3 className="text-xs font-black uppercase flex items-center gap-2 text-slate-500"><Repeat size={14}/> Rotinas Fixas</h3>
+                  <div className="grid grid-cols-1 gap-3">
+                    {recurringTasks.map(rec => (
+                      <div key={rec.id} className={`group flex items-center justify-between p-5 rounded-[28px] border transition-all ${isDark ? 'bg-[#0a1128] border-slate-800 hover:border-orange-500/30' : 'bg-white border-slate-200 shadow-sm'}`}>
+                        <div className="flex items-center gap-4">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDark ? 'bg-slate-800 text-orange-500' : 'bg-slate-50 text-orange-600'}`}>
+                            <CalendarDays size={20} />
+                          </div>
+                          <div>
+                            <p className="font-black text-sm">{rec.text}</p>
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{rec.frequency} • {rec.priority}</span>
+                          </div>
+                        </div>
+                        <button onClick={() => setRecurringTasks(ts => ts.filter(t => t.id !== rec.id))} className="opacity-0 group-hover:opacity-100 p-2 text-slate-600 hover:text-red-500 transition-all">
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    ))}
+                    {recurringTasks.length === 0 && <p className="text-xs text-slate-500 italic py-8 text-center border-2 border-dashed border-slate-800/20 rounded-[32px]">Nenhuma rotina fixa configurada.</p>}
+                  </div>
+                </div>
+
+                <div className="space-y-4">
                   <h3 className="text-xs font-black uppercase flex items-center gap-2 text-slate-500"><Flame size={14}/> Seus Hábitos</h3>
-                  {habits.map(habit => (
-                    <div key={habit.id} className={`border p-6 rounded-[28px] ${isDark ? 'bg-[#0a1128] border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
-                      <h4 className="font-black text-lg">{habit.text}</h4>
-                      <p className={`text-[11px] mt-1 font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-                        {`"${habit.anchor}" → ${habit.tinyAction}`}
-                      </p>
-                      <button onClick={() => { setHabits(habits.map(h => h.id === habit.id ? {...h, streak: h.streak + 1} : h)); setPoints(p => p + 25); }} className="mt-4 w-full py-2 border border-orange-500/30 text-orange-500 rounded-xl text-[10px] font-black uppercase hover:bg-orange-500 hover:text-white transition-all">Registrar (+25 XP)</button>
-                    </div>
-                  ))}
+                  <div className="grid grid-cols-1 gap-3">
+                    {habits.map(habit => (
+                      <div key={habit.id} className={`group border p-6 rounded-[28px] flex flex-col transition-all ${isDark ? 'bg-[#0a1128] border-slate-800 hover:border-orange-500/30' : 'bg-white border-slate-200 shadow-sm'}`}>
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h4 className="font-black text-lg">{habit.text}</h4>
+                            <p className={`text-[11px] mt-1 font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                              {`"${habit.anchor}" → ${habit.tinyAction}`}
+                            </p>
+                          </div>
+                          <button onClick={() => setHabits(hs => hs.filter(h => h.id !== habit.id))} className="opacity-0 group-hover:opacity-100 p-2 text-slate-600 hover:text-red-500 transition-all">
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                        <div className="mt-6 flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-2">
+                             <Flame className="text-orange-500" size={16} />
+                             <span className="text-xs font-black">{habit.streak} dias</span>
+                          </div>
+                          <button onClick={() => { setHabits(habits.map(h => h.id === habit.id ? {...h, streak: h.streak + 1} : h)); setPoints(p => p + 25); }} className="px-6 py-2 bg-orange-600/10 text-orange-500 border border-orange-500/20 rounded-xl text-[10px] font-black uppercase hover:bg-orange-600 hover:text-white transition-all">Check (+25 XP)</button>
+                        </div>
+                      </div>
+                    ))}
+                    {habits.length === 0 && <p className="text-xs text-slate-500 italic py-8 text-center border-2 border-dashed border-slate-800/20 rounded-[32px]">Comece um hábito atômico.</p>}
+                  </div>
                 </div>
               </div>
             </div>
