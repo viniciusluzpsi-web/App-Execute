@@ -12,6 +12,12 @@ export enum Frequency {
   MONTHLY = 'Mensal'
 }
 
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+}
+
 export interface Subtask {
   text: string;
   completed: boolean;
@@ -34,7 +40,7 @@ export interface RecurringTask {
   frequency: Frequency;
   priority: Priority;
   energy: 'Baixa' | 'Média' | 'Alta';
-  completedDates: string[]; // List of ISO dates where this was completed
+  completedDates: string[]; 
 }
 
 export interface Habit {

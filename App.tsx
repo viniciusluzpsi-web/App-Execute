@@ -2,11 +2,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Timer, LayoutGrid, RefreshCw, ListTodo, Zap, AlertTriangle, 
-  ChevronRight, Plus, X, Trophy, Play, Pause, RotateCcw, 
-  BrainCircuit, Anchor, Target, Flame, Sparkles, Calendar as CalendarIcon,
-  ChevronLeft, Repeat, Award, ZapOff, TrendingUp, Sun, Moon, CheckCircle2
+  Plus, X, Trophy, Play, Pause, RotateCcw, 
+  BrainCircuit, Anchor, Target, Flame, Sparkles, 
+  Repeat, Award, TrendingUp, Sun, Moon, CheckCircle2,
+  LogOut, User as UserIcon, Mail, Lock, ArrowRight
 } from 'lucide-react';
-import { Priority, Task, Habit, IdentityBoost, PanicSolution, RecurringTask, Frequency } from './types';
+import { Priority, Task, Habit, IdentityBoost, PanicSolution, RecurringTask, Frequency, User } from './types';
 import { geminiService } from './services/geminiService';
 
 const SynapseLogo = ({ className = "" }: { className?: string }) => (
@@ -28,6 +29,11 @@ const SynapseLogo = ({ className = "" }: { className?: string }) => (
 );
 
 const App: React.FC = () => {
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    const saved = localStorage.getItem('neuro-session');
+    return saved ? JSON.parse(saved) : null;
+  });
+
   const [activeTab, setActiveTab] = useState<'execute' | 'plan' | 'habits' | 'capture'>('execute');
   const [tasks, setTasks] = useState<Task[]>([]);
   const [recurringTasks, setRecurringTasks] = useState<RecurringTask[]>([]);
@@ -41,28 +47,51 @@ const App: React.FC = () => {
   
   const [timeLeft, setTimeLeft] = useState(90 * 60);
   const [isTimerActive, setIsTimerActive] = useState(false);
-  
   const [identityBoost, setIdentityBoost] = useState<IdentityBoost | null>(null);
   const [panicTask, setPanicTask] = useState<Task | null>(null);
   const [panicSolution, setPanicSolution] = useState<PanicSolution | null>(null);
   const [isRescuing, setIsRescuing] = useState(false);
   const [isDecomposing, setIsDecomposing] = useState(false);
   const [justCompletedId, setJustCompletedId] = useState<string | null>(null);
-  
   const [newTaskText, setNewTaskText] = useState("");
   const [obstacleInput, setObstacleInput] = useState("");
   const [showHabitForm, setShowHabitForm] = useState(false);
   const [showRecurringForm, setShowRecurringForm] = useState(false);
-  
   const [newHabit, setNewHabit] = useState({ text: "", anchor: "", tinyAction: "" });
   const [newRecurring, setNewRecurring] = useState({ text: "", frequency: Frequency.DAILY, priority: Priority.Q2 });
 
-  const neuroLevel = useMemo(() => {
-    if (points < 100) return { title: "Iniciante Neural", next: 100 };
-    if (points < 500) return { title: "Arquiteto de Hábitos", next: 500 };
-    if (points < 1500) return { title: "Mestre da Execução", next: 1500 };
-    return { title: "Ninja da Neuroplasticidade", next: Infinity };
-  }, [points]);
+  // Auth States
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authName, setAuthName] = useState("");
+
+  // Load Data for User
+  useEffect(() => {
+    if (!currentUser) return;
+    const key = `neuro-data-${currentUser.id}`;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      setTasks(parsed.tasks || []);
+      setRecurringTasks(parsed.recurringTasks || []);
+      setHabits(parsed.habits || []);
+      setPoints(parsed.points || 0);
+    } else {
+      setTasks([]);
+      setRecurringTasks([]);
+      setHabits([]);
+      setPoints(0);
+    }
+  }, [currentUser]);
+
+  // Save Data for User
+  useEffect(() => {
+    if (!currentUser) return;
+    const key = `neuro-data-${currentUser.id}`;
+    const data = { tasks, recurringTasks, habits, points };
+    localStorage.setItem(key, JSON.stringify(data));
+  }, [tasks, recurringTasks, habits, points, currentUser]);
 
   useEffect(() => {
     localStorage.setItem('neuro-theme', theme);
@@ -77,6 +106,46 @@ const App: React.FC = () => {
     }
     return () => clearInterval(interval);
   }, [isTimerActive, timeLeft]);
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!authEmail || !authPassword) return;
+    const users = JSON.parse(localStorage.getItem('neuro-users') || '[]');
+    const user = users.find((u: any) => u.email === authEmail && u.password === authPassword);
+    
+    if (user) {
+      const sessionUser = { id: user.id, name: user.name, email: user.email };
+      setCurrentUser(sessionUser);
+      localStorage.setItem('neuro-session', JSON.stringify(sessionUser));
+    } else {
+      alert("Credenciais inválidas");
+    }
+  };
+
+  const handleRegister = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!authEmail || !authPassword || !authName) return;
+    const users = JSON.parse(localStorage.getItem('neuro-users') || '[]');
+    if (users.find((u: any) => u.email === authEmail)) {
+      alert("Email já cadastrado");
+      return;
+    }
+    const newUser = { id: crypto.randomUUID(), name: authName, email: authEmail, password: authPassword };
+    users.push(newUser);
+    localStorage.setItem('neuro-users', JSON.stringify(users));
+    
+    const sessionUser = { id: newUser.id, name: newUser.name, email: newUser.email };
+    setCurrentUser(sessionUser);
+    localStorage.setItem('neuro-session', JSON.stringify(sessionUser));
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('neuro-session');
+    setTasks([]);
+    setHabits([]);
+    setPoints(0);
+  };
 
   const calendarDays = useMemo(() => {
     const days = [];
@@ -95,8 +164,12 @@ const App: React.FC = () => {
   }, []);
 
   const dayTasks = useMemo(() => tasks.filter(t => t.date === selectedDate), [tasks, selectedDate]);
-
-  const toggleTheme = () => setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  const neuroLevel = useMemo(() => {
+    if (points < 100) return { title: "Iniciante Neural", next: 100 };
+    if (points < 500) return { title: "Arquiteto de Hábitos", next: 500 };
+    if (points < 1500) return { title: "Mestre da Execução", next: 1500 };
+    return { title: "Ninja da Neuroplasticidade", next: Infinity };
+  }, [points]);
 
   const addTask = () => {
     if (!newTaskText.trim()) return;
@@ -114,34 +187,21 @@ const App: React.FC = () => {
     setNewTaskText("");
   };
 
-  const addRecurringTask = () => {
-    if (!newRecurring.text.trim()) return;
-    const task: RecurringTask = {
-      id: crypto.randomUUID(),
-      text: newRecurring.text,
-      frequency: newRecurring.frequency,
-      priority: newRecurring.priority,
-      energy: 'Média',
-      completedDates: []
-    };
-    setRecurringTasks(prev => [...prev, task]);
-    setNewRecurring({ text: "", frequency: Frequency.DAILY, priority: Priority.Q2 });
-    setShowRecurringForm(false);
-  };
-
-  const addHabitAction = () => {
-    if (!newHabit.text.trim()) return;
-    const habit: Habit = {
-      id: crypto.randomUUID(),
-      text: newHabit.text,
-      anchor: newHabit.anchor,
-      tinyAction: newHabit.tinyAction,
-      streak: 0,
-      lastCompleted: null
-    };
-    setHabits(prev => [...prev, habit]);
-    setNewHabit({ text: "", anchor: "", tinyAction: "" });
-    setShowHabitForm(false);
+  // Define handleDecompose to break down a task into smaller steps using AI.
+  const handleDecompose = async (task: Task) => {
+    setIsDecomposing(true);
+    try {
+      const steps = await geminiService.decomposeTask(task.text);
+      setTasks(prev => prev.map(t => t.id === task.id ? { ...t, subtasks: steps } : t));
+      // Update selectedTask if it is the one being decomposed
+      if (selectedTask?.id === task.id) {
+        setSelectedTask({ ...task, subtasks: steps });
+      }
+    } catch (error) {
+      console.error("Error decomposing task:", error);
+    } finally {
+      setIsDecomposing(false);
+    }
   };
 
   const toggleTask = async (id: string) => {
@@ -164,58 +224,85 @@ const App: React.FC = () => {
     }
   };
 
-  const handleDecompose = async (task: Task) => {
-    setIsDecomposing(true);
-    try {
-      const steps = await geminiService.decomposeTask(task.text);
-      setTasks(prev => prev.map(t => t.id === task.id ? { ...t, subtasks: steps } : t));
-      if (selectedTask?.id === task.id) {
-        setSelectedTask(prev => prev ? { ...prev, subtasks: steps } : null);
-      }
-    } catch (e) { console.error(e); } finally { setIsDecomposing(false); }
-  };
-
-  const handleRescue = async () => {
-    if (!panicTask || !obstacleInput.trim()) return;
-    setIsRescuing(true);
-    try {
-      const solution = await geminiService.rescueTask(panicTask.text, obstacleInput);
-      setPanicSolution(solution);
-    } catch (e) { console.error(e); } finally { setIsRescuing(false); }
-  };
-
-  const moveTaskPriority = (taskId: string, newPriority: Priority) => {
-    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, priority: newPriority } : t));
-  };
-
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  };
-
   const isDark = theme === 'dark';
+
+  if (!currentUser) {
+    return (
+      <div className={`min-h-screen flex items-center justify-center p-6 transition-colors duration-500 ${isDark ? 'bg-[#020617]' : 'bg-slate-50'}`}>
+        <div className={`w-full max-w-md p-10 rounded-[48px] border shadow-2xl animate-in zoom-in-95 duration-700 ${isDark ? 'bg-[#0a1128]/80 border-slate-800' : 'bg-white border-slate-200'}`}>
+          <div className="flex flex-col items-center mb-10 text-center">
+            <SynapseLogo className="w-16 h-16 mb-6" />
+            <h1 className={`text-4xl font-black italic tracking-tighter ${isDark ? 'text-orange-500' : 'text-orange-600'}`}>NEUROEXECUTOR</h1>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-2">Gestão Executiva Cerebral</p>
+          </div>
+
+          <form onSubmit={isRegistering ? handleRegister : handleLogin} className="space-y-4">
+            {isRegistering && (
+              <div className="relative group">
+                <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-orange-500 transition-colors" size={20} />
+                <input required className={`w-full py-4 pl-12 pr-4 rounded-2xl border outline-none transition-all ${isDark ? 'bg-[#020617] border-slate-800 focus:border-orange-500' : 'bg-slate-50 border-slate-200 focus:border-orange-500'}`} placeholder="Nome Completo" value={authName} onChange={e => setAuthName(e.target.value)} />
+              </div>
+            )}
+            <div className="relative group">
+              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-orange-500 transition-colors" size={20} />
+              <input required type="email" className={`w-full py-4 pl-12 pr-4 rounded-2xl border outline-none transition-all ${isDark ? 'bg-[#020617] border-slate-800 focus:border-orange-500' : 'bg-slate-50 border-slate-200 focus:border-orange-500'}`} placeholder="Email" value={authEmail} onChange={e => setAuthEmail(e.target.value)} />
+            </div>
+            <div className="relative group">
+              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-orange-500 transition-colors" size={20} />
+              <input required type="password" className={`w-full py-4 pl-12 pr-4 rounded-2xl border outline-none transition-all ${isDark ? 'bg-[#020617] border-slate-800 focus:border-orange-500' : 'bg-slate-50 border-slate-200 focus:border-orange-500'}`} placeholder="Senha" value={authPassword} onChange={e => setAuthPassword(e.target.value)} />
+            </div>
+            
+            <button type="submit" className="w-full py-4 bg-orange-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-orange-900/40 flex items-center justify-center gap-3 hover:bg-orange-500 transition-all active:scale-[0.98]">
+              {isRegistering ? "Ativar Neurônios" : "Entrar no Fluxo"}
+              <ArrowRight size={20} />
+            </button>
+          </form>
+
+          <button onClick={() => setIsRegistering(!isRegistering)} className="w-full mt-8 text-center text-xs font-bold text-slate-500 hover:text-orange-500 transition-colors uppercase tracking-wider">
+            {isRegistering ? "Já tenho uma conta neural" : "Criar nova rede executiva"}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`min-h-screen flex flex-col md:flex-row transition-colors duration-500 ${isDark ? 'bg-[#020617] text-white' : 'bg-slate-50 text-slate-900'}`}>
-      <nav className={`fixed bottom-0 w-full transition-colors duration-500 backdrop-blur-xl border-t md:static md:w-64 md:h-screen md:border-t-0 md:border-r z-50 ${isDark ? 'bg-[#0a1128]/95 border-slate-800' : 'bg-white/95 border-slate-200'}`}>
-        <div className="flex items-center justify-between p-4 md:flex-col md:items-start md:p-8 md:mb-4">
+      <nav className={`fixed bottom-0 w-full transition-colors duration-500 backdrop-blur-xl border-t md:static md:w-72 md:h-screen md:border-t-0 md:border-r z-50 flex md:flex-col ${isDark ? 'bg-[#0a1128]/95 border-slate-800' : 'bg-white/95 border-slate-200'}`}>
+        <div className="hidden md:flex items-center justify-between p-8">
           <div>
             <h1 className={`text-2xl font-black flex items-center gap-3 italic tracking-tight ${isDark ? 'text-orange-500' : 'text-orange-600'}`}>
               <SynapseLogo />
               EXECUTE
             </h1>
-            <p className={`text-[10px] font-bold mt-2 uppercase tracking-widest ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Neuroprodutividade</p>
+            <div className="mt-6 flex items-center gap-3 group">
+              <div className="w-10 h-10 rounded-xl bg-orange-600/20 text-orange-500 flex items-center justify-center font-black">
+                {currentUser.name[0].toUpperCase()}
+              </div>
+              <div className="flex-1 overflow-hidden">
+                <p className="text-xs font-black truncate">{currentUser.name}</p>
+                <p className="text-[9px] text-slate-500 font-bold uppercase truncate">{currentUser.email}</p>
+              </div>
+            </div>
           </div>
-          <button onClick={toggleTheme} className={`p-2 rounded-xl transition-all ${isDark ? 'bg-slate-800 text-yellow-400 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'} md:mt-8`}>
-            {isDark ? <Sun size={20}/> : <Moon size={20}/>}
-          </button>
         </div>
-        <div className="flex justify-around p-2 md:flex-col md:gap-2 md:px-4">
+
+        <div className="flex flex-1 justify-around p-2 md:flex-col md:gap-2 md:px-4 md:justify-start">
           <NavButton isDark={isDark} icon={<Timer size={22}/>} label="Focar" active={activeTab === 'execute'} onClick={() => setActiveTab('execute')} />
           <NavButton isDark={isDark} icon={<LayoutGrid size={22}/>} label="Planejar" active={activeTab === 'plan'} onClick={() => setActiveTab('plan')} />
           <NavButton isDark={isDark} icon={<RefreshCw size={22}/>} label="Rotinas" active={activeTab === 'habits'} onClick={() => setActiveTab('habits')} />
           <NavButton isDark={isDark} icon={<ListTodo size={22}/>} label="Captura" active={activeTab === 'capture'} onClick={() => setActiveTab('capture')} />
+        </div>
+
+        <div className="hidden md:flex flex-col gap-2 p-4 border-t border-slate-800/50 mt-auto">
+          <button onClick={() => setTheme(isDark ? 'light' : 'dark')} className={`flex items-center gap-4 px-6 py-4 rounded-2xl font-bold text-xs transition-all ${isDark ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-500 hover:bg-slate-100'}`}>
+            {isDark ? <Sun size={18}/> : <Moon size={18}/>}
+            {isDark ? "Modo Claro" : "Modo Escuro"}
+          </button>
+          <button onClick={handleLogout} className="flex items-center gap-4 px-6 py-4 rounded-2xl font-bold text-xs text-red-500 hover:bg-red-500/10 transition-all">
+            <LogOut size={18}/>
+            Encerrar Sessão
+          </button>
         </div>
       </nav>
 
@@ -300,11 +387,7 @@ const App: React.FC = () => {
                     <h3 className="text-xs font-black uppercase text-slate-500 mb-4">Tarefas do Dia</h3>
                     <div className="space-y-2">
                       {dayTasks.filter(t => !t.completed).map(t => (
-                        <button 
-                          key={t.id} 
-                          onClick={() => setSelectedTask(t)} 
-                          className={`w-full text-left p-4 rounded-2xl border transition-all relative overflow-hidden ${selectedTask?.id === t.id ? 'bg-orange-600/10 border-orange-500 text-white' : 'border-slate-800 text-slate-500'} ${justCompletedId === t.id ? 'animate-glow-success border-green-500' : ''}`}
-                        >
+                        <button key={t.id} onClick={() => setSelectedTask(t)} className={`w-full text-left p-4 rounded-2xl border transition-all relative overflow-hidden ${selectedTask?.id === t.id ? 'bg-orange-600/10 border-orange-500 text-white' : 'border-slate-800 text-slate-500'}`}>
                           <span className="text-xs font-bold truncate">{t.text}</span>
                         </button>
                       ))}
@@ -322,10 +405,10 @@ const App: React.FC = () => {
             <div className="space-y-8 animate-in slide-in-from-bottom duration-500">
                <h2 className="text-3xl font-black italic">Matriz de Decisão</h2>
                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 <MatrixQuadrant isDark={isDark} priority={Priority.Q1} title="Q1: Fazer Agora" desc="Urgente" tasks={dayTasks.filter(t => t.priority === Priority.Q1 && !t.completed)} onSelect={setSelectedTask} onTabChange={() => setActiveTab('execute')} onMoveTask={moveTaskPriority} />
-                 <MatrixQuadrant isDark={isDark} priority={Priority.Q2} title="Q2: Estratégico" desc="Importante" tasks={dayTasks.filter(t => t.priority === Priority.Q2 && !t.completed)} onSelect={setSelectedTask} onTabChange={() => setActiveTab('execute')} onMoveTask={moveTaskPriority} />
-                 <MatrixQuadrant isDark={isDark} priority={Priority.Q3} title="Q3: Delegar" desc="Interrupções" tasks={dayTasks.filter(t => t.priority === Priority.Q3 && !t.completed)} onSelect={setSelectedTask} onTabChange={() => setActiveTab('execute')} onMoveTask={moveTaskPriority} />
-                 <MatrixQuadrant isDark={isDark} priority={Priority.Q4} title="Q4: Eliminar" desc="Trivial" tasks={dayTasks.filter(t => t.priority === Priority.Q4 && !t.completed)} onSelect={setSelectedTask} onTabChange={() => setActiveTab('execute')} onMoveTask={moveTaskPriority} />
+                 <MatrixQuadrant isDark={isDark} priority={Priority.Q1} title="Q1: Fazer Agora" desc="Urgente" tasks={dayTasks.filter(t => t.priority === Priority.Q1 && !t.completed)} onSelect={setSelectedTask} onTabChange={() => setActiveTab('execute')} onMoveTask={(tid, p) => setTasks(ts => ts.map(t => t.id === tid ? {...t, priority: p} : t))} />
+                 <MatrixQuadrant isDark={isDark} priority={Priority.Q2} title="Q2: Estratégico" desc="Importante" tasks={dayTasks.filter(t => t.priority === Priority.Q2 && !t.completed)} onSelect={setSelectedTask} onTabChange={() => setActiveTab('execute')} onMoveTask={(tid, p) => setTasks(ts => ts.map(t => t.id === tid ? {...t, priority: p} : t))} />
+                 <MatrixQuadrant isDark={isDark} priority={Priority.Q3} title="Q3: Delegar" desc="Interrupções" tasks={dayTasks.filter(t => t.priority === Priority.Q3 && !t.completed)} onSelect={setSelectedTask} onTabChange={() => setActiveTab('execute')} onMoveTask={(tid, p) => setTasks(ts => ts.map(t => t.id === tid ? {...t, priority: p} : t))} />
+                 <MatrixQuadrant isDark={isDark} priority={Priority.Q4} title="Q4: Eliminar" desc="Trivial" tasks={dayTasks.filter(t => t.priority === Priority.Q4 && !t.completed)} onSelect={setSelectedTask} onTabChange={() => setActiveTab('execute')} onMoveTask={(tid, p) => setTasks(ts => ts.map(t => t.id === tid ? {...t, priority: p} : t))} />
                </div>
             </div>
           )}
@@ -354,22 +437,9 @@ const App: React.FC = () => {
               </div>
 
               <div className="flex gap-2 justify-end">
-                <button onClick={() => { setShowRecurringForm(!showRecurringForm); setShowHabitForm(false); }} className={`px-6 py-3 border rounded-2xl font-bold flex items-center gap-2 transition-all ${showRecurringForm ? 'bg-orange-600 text-white' : 'border-slate-800'}`}> <Repeat size={18}/> Tarefa Fixa </button>
-                <button onClick={() => { setShowHabitForm(!showHabitForm); setShowRecurringForm(false); }} className={`px-6 py-3 border rounded-2xl font-bold flex items-center gap-2 transition-all ${showHabitForm ? 'bg-orange-600 text-white' : 'bg-orange-600 text-white'}`}> <Flame size={18}/> Novo Hábito </button>
+                <button onClick={() => setShowRecurringForm(!showRecurringForm)} className={`px-6 py-3 border rounded-2xl font-bold flex items-center gap-2 transition-all ${showRecurringForm ? 'bg-orange-600 text-white' : 'border-slate-800'}`}> <Repeat size={18}/> Tarefa Fixa </button>
+                <button onClick={() => setShowHabitForm(!showHabitForm)} className={`px-6 py-3 bg-orange-600 text-white rounded-2xl font-bold flex items-center gap-2 transition-all`}> <Flame size={18}/> Novo Hábito </button>
               </div>
-
-              {showRecurringForm && (
-                <div className={`p-8 border rounded-[32px] animate-in slide-in-from-top ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200 shadow-xl'}`}>
-                  <h4 className="font-black uppercase text-sm mb-4">Nova Tarefa Fixa</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <input className={`p-4 rounded-xl border ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50'}`} placeholder="Ex: Revisão Semanal" value={newRecurring.text} onChange={e => setNewRecurring({...newRecurring, text: e.target.value})} />
-                    <select className={`p-4 rounded-xl border ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50'}`} value={newRecurring.frequency} onChange={e => setNewRecurring({...newRecurring, frequency: e.target.value as Frequency})}>
-                      {Object.values(Frequency).map(f => <option key={f} value={f}>{f}</option>)}
-                    </select>
-                  </div>
-                  <button onClick={addRecurringTask} className="mt-4 w-full py-4 bg-orange-600 text-white rounded-xl font-black uppercase">Adicionar ao Fluxo</button>
-                </div>
-              )}
 
               {showHabitForm && (
                 <div className={`p-8 border rounded-[32px] animate-in slide-in-from-top ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200 shadow-xl'}`}>
@@ -379,7 +449,12 @@ const App: React.FC = () => {
                     <input className={`p-4 rounded-xl border ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50'}`} placeholder="Âncora (Quando...)" value={newHabit.anchor} onChange={e => setNewHabit({...newHabit, anchor: e.target.value})} />
                     <input className={`p-4 rounded-xl border ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50'}`} placeholder="Micro-ação" value={newHabit.tinyAction} onChange={e => setNewHabit({...newHabit, tinyAction: e.target.value})} />
                   </div>
-                  <button onClick={addHabitAction} className="mt-4 w-full py-4 bg-orange-600 text-white rounded-xl font-black uppercase">Implementar</button>
+                  <button onClick={() => {
+                    if (!newHabit.text) return;
+                    setHabits([...habits, { id: crypto.randomUUID(), ...newHabit, streak: 0, lastCompleted: null }]);
+                    setNewHabit({ text: "", anchor: "", tinyAction: "" });
+                    setShowHabitForm(false);
+                  }} className="mt-4 w-full py-4 bg-orange-600 text-white rounded-xl font-black uppercase">Implementar</button>
                 </div>
               )}
 
@@ -392,20 +467,9 @@ const App: React.FC = () => {
                       <p className={`text-[11px] mt-1 font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
                         {`"${habit.anchor}" → ${habit.tinyAction}`}
                       </p>
-                      <button onClick={() => { setHabits(prev => prev.map(h => h.id === habit.id ? { ...h, streak: h.streak + 1 } : h)); setPoints(prev => prev + 25); }} className="mt-4 w-full py-2 border border-orange-500/30 text-orange-500 rounded-xl text-[10px] font-black uppercase hover:bg-orange-500 hover:text-white transition-all">Registrar (+25 XP)</button>
+                      <button onClick={() => { setHabits(habits.map(h => h.id === habit.id ? {...h, streak: h.streak + 1} : h)); setPoints(p => p + 25); }} className="mt-4 w-full py-2 border border-orange-500/30 text-orange-500 rounded-xl text-[10px] font-black uppercase hover:bg-orange-500 hover:text-white transition-all">Registrar (+25 XP)</button>
                     </div>
                   ))}
-                  {habits.length === 0 && <p className="text-center text-xs opacity-40">Nenhum hábito ativo.</p>}
-                </div>
-                <div className="space-y-4">
-                  <h3 className="text-xs font-black uppercase flex items-center gap-2 text-slate-500"><Repeat size={14}/> Suas Rotinas</h3>
-                  {recurringTasks.map(rt => (
-                    <div key={rt.id} className={`border p-6 rounded-[28px] ${isDark ? 'bg-[#0a1128] border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
-                      <h4 className="font-black text-lg">{rt.text}</h4>
-                      <p className="text-[10px] font-black uppercase text-orange-500 mt-1">{rt.frequency}</p>
-                    </div>
-                  ))}
-                  {recurringTasks.length === 0 && <p className="text-center text-xs opacity-40">Nenhuma rotina fixa.</p>}
                 </div>
               </div>
             </div>
@@ -419,14 +483,6 @@ const App: React.FC = () => {
                   <input autoFocus className={`flex-1 bg-transparent border-none rounded-3xl px-6 py-6 text-xl outline-none focus:ring-2 focus:ring-orange-600 ${isDark ? 'text-white' : 'text-slate-900'}`} placeholder="O que está na sua mente?" value={newTaskText} onChange={e => setNewTaskText(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTask()}/>
                   <button onClick={addTask} className="w-20 h-20 bg-orange-600 text-white rounded-3xl flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-xl shadow-orange-900/40"> <Plus size={32} strokeWidth={3}/> </button>
                 </div>
-              </div>
-              <div className="space-y-4 text-left">
-                {dayTasks.filter(t => !t.completed).map(t => (
-                  <div key={t.id} className={`p-6 border rounded-[28px] flex justify-between items-center ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100 shadow-sm'}`}>
-                    <span className="font-bold">{t.text}</span>
-                    <button onClick={() => setTasks(tasks.filter(task => task.id !== t.id))} className="text-slate-500 hover:text-red-500 transition-colors"><X size={20}/></button>
-                  </div>
-                ))}
               </div>
             </div>
           )}
@@ -444,7 +500,12 @@ const App: React.FC = () => {
               {!panicSolution ? (
                 <div className="space-y-6">
                   <textarea autoFocus className={`w-full border rounded-[32px] p-6 text-sm outline-none resize-none h-32 ${isDark ? 'bg-[#020617] border-slate-800 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} placeholder="O que está impedindo você agora?" value={obstacleInput} onChange={e => setObstacleInput(e.target.value)}/>
-                  <button onClick={handleRescue} disabled={isRescuing || !obstacleInput.trim()} className="w-full py-5 bg-orange-600 text-white rounded-3xl font-black uppercase tracking-widest shadow-2xl"> {isRescuing ? "Analisando..." : "SOLICITAR RESGATE"} </button>
+                  <button onClick={async () => {
+                    setIsRescuing(true);
+                    const res = await geminiService.rescueTask(panicTask.text, obstacleInput);
+                    setPanicSolution(res);
+                    setIsRescuing(false);
+                  }} disabled={isRescuing || !obstacleInput.trim()} className="w-full py-5 bg-orange-600 text-white rounded-3xl font-black uppercase tracking-widest shadow-2xl"> {isRescuing ? "Analisando..." : "SOLICITAR RESGATE"} </button>
                 </div>
               ) : (
                 <div className="space-y-6 animate-in slide-in-from-bottom duration-500">
@@ -464,6 +525,7 @@ const App: React.FC = () => {
           </div>
         </div>
       )}
+
       {identityBoost && (
         <div className="fixed top-6 right-6 z-[200] w-80 p-6 rounded-3xl bg-orange-600 text-white shadow-2xl animate-in slide-in-from-right duration-500">
           <p className="text-xs font-bold uppercase tracking-widest opacity-60 mb-1">Dopamina Extra</p>
@@ -492,48 +554,29 @@ const MatrixQuadrant: React.FC<{
   onMoveTask: (taskId: string, newPriority: Priority) => void 
 }> = ({ isDark, priority, title, desc, tasks, onSelect, onTabChange, onMoveTask }) => {
   const [isOver, setIsOver] = useState(false);
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsOver(true);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsOver(false);
-    const taskId = e.dataTransfer.getData("taskId");
-    if (taskId) {
-      onMoveTask(taskId, priority);
-    }
-  };
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsOver(true); };
+  const handleDrop = (e: React.DragEvent) => { e.preventDefault(); setIsOver(false); const tid = e.dataTransfer.getData("taskId"); if (tid) onMoveTask(tid, priority); };
 
   return (
-    <div 
-      onDragOver={handleDragOver}
-      onDragLeave={() => setIsOver(false)}
-      onDrop={handleDrop}
-      className={`h-[350px] border rounded-[40px] p-8 flex flex-col transition-all ${isDark ? 'border-slate-800 bg-slate-900/50' : 'bg-white border-slate-200'} ${isOver ? 'ring-2 ring-orange-500 ring-inset border-transparent' : ''}`}
-    >
+    <div onDragOver={handleDragOver} onDragLeave={() => setIsOver(false)} onDrop={handleDrop} className={`h-[350px] border rounded-[40px] p-8 flex flex-col transition-all ${isDark ? 'border-slate-800 bg-slate-900/50' : 'bg-white border-slate-200'} ${isOver ? 'ring-2 ring-orange-500 ring-inset border-transparent' : ''}`}>
       <h4 className="font-black text-xl uppercase italic tracking-tighter">{title}</h4>
       <p className="text-[10px] font-bold opacity-40 uppercase tracking-widest">{desc}</p>
       <div className="flex-1 overflow-y-auto mt-6 space-y-2">
         {tasks.map(t => (
-          <div 
-            key={t.id} 
-            draggable={true}
-            onDragStart={(e) => {
-              e.dataTransfer.setData("taskId", t.id);
-            }}
-            className="p-4 rounded-2xl border border-slate-800/50 flex items-center justify-between group hover:border-orange-500/30 transition-all cursor-grab active:cursor-grabbing bg-[#0a1128]/40"
-          >
+          <div key={t.id} draggable={true} onDragStart={(e) => e.dataTransfer.setData("taskId", t.id)} className="p-4 rounded-2xl border border-slate-800/50 flex items-center justify-between group hover:border-orange-500/30 transition-all cursor-grab active:cursor-grabbing bg-[#0a1128]/40">
             <span className="text-xs font-bold truncate opacity-80">{t.text}</span>
             <button onClick={() => { onSelect(t); onTabChange(); }} className="w-8 h-8 rounded-xl bg-orange-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"> <Play size={12} fill="currentColor"/> </button>
           </div>
         ))}
-        {tasks.length === 0 && <div className="h-full flex items-center justify-center opacity-10 border-2 border-dashed border-slate-700 rounded-3xl"><span className="text-[8px] uppercase font-black">Drop Here</span></div>}
       </div>
     </div>
   );
+};
+
+const formatTime = (seconds: number) => {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 };
 
 export default App;
