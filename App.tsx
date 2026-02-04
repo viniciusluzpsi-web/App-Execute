@@ -4,7 +4,7 @@ import {
   Timer, LayoutGrid, RefreshCw, ListTodo, Zap, AlertTriangle, 
   ChevronRight, Plus, X, Trophy, Play, Pause, RotateCcw, 
   BrainCircuit, Anchor, Target, Flame, Sparkles, Calendar as CalendarIcon,
-  ChevronLeft, Repeat, Award, ZapOff, TrendingUp, Sun, Moon
+  ChevronLeft, Repeat, Award, ZapOff, TrendingUp, Sun, Moon, CheckCircle2
 } from 'lucide-react';
 import { Priority, Task, Habit, IdentityBoost, PanicSolution, RecurringTask, Frequency } from './types';
 import { geminiService } from './services/geminiService';
@@ -47,6 +47,7 @@ const App: React.FC = () => {
   const [panicSolution, setPanicSolution] = useState<PanicSolution | null>(null);
   const [isRescuing, setIsRescuing] = useState(false);
   const [isDecomposing, setIsDecomposing] = useState(false);
+  const [justCompletedId, setJustCompletedId] = useState<string | null>(null);
   
   const [newTaskText, setNewTaskText] = useState("");
   const [obstacleInput, setObstacleInput] = useState("");
@@ -148,7 +149,10 @@ const App: React.FC = () => {
     if (!task) return;
     const isNowCompleted = !task.completed;
     setTasks(prev => prev.map(t => t.id === id ? { ...t, completed: isNowCompleted } : t));
+    
     if (isNowCompleted) {
+      setJustCompletedId(id);
+      setTimeout(() => setJustCompletedId(null), 1200);
       setPoints(prev => prev + 15);
       try {
         const boostText = await geminiService.generateIdentityBoost(task.text);
@@ -247,12 +251,20 @@ const App: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className={`border rounded-[40px] p-8 min-h-[300px] ${isDark ? 'bg-[#0a1128] border-slate-800' : 'bg-white border-slate-200 shadow-lg'}`}>
+                  <div className={`border rounded-[40px] p-8 min-h-[300px] relative overflow-hidden transition-all duration-500 ${isDark ? 'bg-[#0a1128] border-slate-800' : 'bg-white border-slate-200 shadow-lg'} ${selectedTask && justCompletedId === selectedTask.id ? 'animate-glow-success' : ''}`}>
+                    {selectedTask && justCompletedId === selectedTask.id && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-green-500/10 pointer-events-none">
+                        <CheckCircle2 size={120} className="text-green-500 animate-check-pop" />
+                      </div>
+                    )}
+                    
                     {selectedTask ? (
                       <div className="space-y-6">
                         <div className="flex justify-between items-start">
                           <div>
-                            <h2 className="text-3xl font-black">{selectedTask.text}</h2>
+                            <h2 className={`text-3xl font-black transition-all ${justCompletedId === selectedTask.id ? 'text-green-500 translate-y-[-4px]' : ''}`}>
+                              {selectedTask.text}
+                            </h2>
                             <span className="inline-block mt-2 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-orange-600/20 text-orange-400 animate-pulse-orange">
                               {selectedTask.priority}
                             </span>
@@ -271,7 +283,13 @@ const App: React.FC = () => {
                             </button>
                           )}
                         </div>
-                        <button onClick={() => toggleTask(selectedTask.id)} className="w-full py-4 bg-orange-600 hover:bg-orange-500 text-white rounded-2xl font-black uppercase tracking-widest transition-all">Finalizar</button>
+                        <button 
+                          onClick={() => toggleTask(selectedTask.id)} 
+                          disabled={selectedTask.completed || justCompletedId === selectedTask.id}
+                          className={`w-full py-4 rounded-2xl font-black uppercase tracking-widest transition-all shadow-xl active:scale-[0.98] ${selectedTask.completed || justCompletedId === selectedTask.id ? 'bg-green-600 text-white' : 'bg-orange-600 hover:bg-orange-500 text-white'}`}
+                        >
+                          {justCompletedId === selectedTask.id ? 'Execução Concluída!' : 'Finalizar Execução'}
+                        </button>
                       </div>
                     ) : <div className="py-24 text-center opacity-30 text-slate-400"><Anchor size={60} className="mx-auto mb-4"/><p>Selecione uma tarefa</p></div>}
                   </div>
@@ -282,7 +300,11 @@ const App: React.FC = () => {
                     <h3 className="text-xs font-black uppercase text-slate-500 mb-4">Tarefas do Dia</h3>
                     <div className="space-y-2">
                       {dayTasks.filter(t => !t.completed).map(t => (
-                        <button key={t.id} onClick={() => setSelectedTask(t)} className={`w-full text-left p-4 rounded-2xl border transition-all ${selectedTask?.id === t.id ? 'bg-orange-600/10 border-orange-500 text-white' : 'border-slate-800 text-slate-500'}`}>
+                        <button 
+                          key={t.id} 
+                          onClick={() => setSelectedTask(t)} 
+                          className={`w-full text-left p-4 rounded-2xl border transition-all relative overflow-hidden ${selectedTask?.id === t.id ? 'bg-orange-600/10 border-orange-500 text-white' : 'border-slate-800 text-slate-500'} ${justCompletedId === t.id ? 'animate-glow-success border-green-500' : ''}`}
+                        >
                           <span className="text-xs font-bold truncate">{t.text}</span>
                         </button>
                       ))}
@@ -336,7 +358,6 @@ const App: React.FC = () => {
                 <button onClick={() => { setShowHabitForm(!showHabitForm); setShowRecurringForm(false); }} className={`px-6 py-3 border rounded-2xl font-bold flex items-center gap-2 transition-all ${showHabitForm ? 'bg-orange-600 text-white' : 'bg-orange-600 text-white'}`}> <Flame size={18}/> Novo Hábito </button>
               </div>
 
-              {/* Forms Section */}
               {showRecurringForm && (
                 <div className={`p-8 border rounded-[32px] animate-in slide-in-from-top ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200 shadow-xl'}`}>
                   <h4 className="font-black uppercase text-sm mb-4">Nova Tarefa Fixa</h4>
