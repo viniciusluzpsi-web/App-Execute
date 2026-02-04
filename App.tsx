@@ -124,7 +124,6 @@ const App: React.FC = () => {
       recurringTasks.forEach(rec => {
         const alreadyExists = updated.find(t => t.text === rec.text && t.date === selectedDate);
         if (!alreadyExists) {
-          // Simplificação: apenas cria se for diário por enquanto para não sobrecarregar
           if (rec.frequency === Frequency.DAILY) {
             updated.push({
               id: crypto.randomUUID(),
@@ -511,7 +510,7 @@ const App: React.FC = () => {
                   </div>
                   <button onClick={() => {
                     if (!newRecurring.text) return;
-                    setRecurringTasks([...recurringTasks, { id: crypto.randomUUID(), ...newRecurring, completedDates: [] }]);
+                    setRecurringTasks(prev => [...prev, { id: crypto.randomUUID(), ...newRecurring, completedDates: [] }]);
                     setNewRecurring({ text: "", frequency: Frequency.DAILY, priority: Priority.Q2, energy: 'Média' });
                     setShowRecurringForm(false);
                   }} className="mt-4 w-full py-4 bg-orange-600 text-white rounded-xl font-black uppercase hover:bg-orange-500 transition-all shadow-lg">Ativar Rotina</button>
@@ -528,7 +527,7 @@ const App: React.FC = () => {
                   </div>
                   <button onClick={() => {
                     if (!newHabit.text) return;
-                    setHabits([...habits, { id: crypto.randomUUID(), ...newHabit, streak: 0, lastCompleted: null }]);
+                    setHabits(prev => [...prev, { id: crypto.randomUUID(), ...newHabit, streak: 0, lastCompleted: null }]);
                     setNewHabit({ text: "", anchor: "", tinyAction: "" });
                     setShowHabitForm(false);
                   }} className="mt-4 w-full py-4 bg-orange-600 text-white rounded-xl font-black uppercase hover:bg-orange-500 transition-all shadow-lg">Implementar</button>

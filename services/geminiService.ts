@@ -6,9 +6,14 @@ const modelName = 'gemini-3-flash-preview';
 
 /**
  * Helper para criar a instância do AI apenas quando necessário.
- * Segue a diretriz de garantir que a chave mais atualizada seja usada.
  */
-const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
+const getAI = () => {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey || apiKey === "undefined") {
+    throw new Error("API_KEY_MISSING");
+  }
+  return new GoogleGenAI({ apiKey });
+};
 
 export const geminiService = {
   async categorizeTasks(tasks: Task[]): Promise<{ id: string; priority: Priority; energy: Task['energy'] }[]> {
@@ -34,7 +39,7 @@ export const geminiService = {
         }
       });
       return JSON.parse(response.text || '[]');
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao categorizar tarefas:", error);
       return [];
     }
@@ -62,9 +67,12 @@ export const geminiService = {
       });
       const result = JSON.parse(response.text || '{"steps":[]}');
       return result.steps;
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao decompor tarefa:", error);
-      return ["Tente dividir a tarefa manualmente em passos menores."];
+      if (error.message === "API_KEY_MISSING") {
+        return ["Erro: API Key não configurada no ambiente publicado.", "Acesse as configurações do seu host.", "Adicione a variável API_KEY.", "Obtenha a chave em aistudio.google.com", "Recarregue o app."];
+      }
+      return ["Tente dividir a tarefa manualmente em passos menores (Erro de conexão)."];
     }
   },
 
@@ -88,12 +96,19 @@ export const geminiService = {
         }
       });
       return JSON.parse(response.text || '{}');
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro no resgate neural:", error);
+      if (error.message === "API_KEY_MISSING") {
+        return {
+          diagnosis: "Configuração Incompleta.",
+          steps: ["A API Key está faltando no ambiente publicado.", "Configure a variável API_KEY no seu servidor/host.", "Verifique o console do navegador para detalhes."],
+          encouragement: "A IA precisa da chave para responder fora do Google Studio."
+        };
+      }
       return {
         diagnosis: "Falha na conexão neural.",
         steps: ["Respire fundo por 30 segundos.", "Faça a menor ação possível.", "Beba um copo de água."],
-        encouragement: "Você consegue recomeçar."
+        encouragement: "Você consegue recomeçar, mesmo sem IA no momento."
       };
     }
   },
@@ -117,7 +132,7 @@ export const geminiService = {
       });
       const result = JSON.parse(response.text || '{"boost":""}');
       return result.boost;
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao gerar boost:", error);
       return "Ótimo trabalho! Seu cérebro está criando novos caminhos de sucesso.";
     }
