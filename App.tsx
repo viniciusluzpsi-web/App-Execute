@@ -6,7 +6,8 @@ import {
   BrainCircuit, Anchor, Target, Flame, Sparkles, 
   Repeat, Award, TrendingUp, Sun, Moon, CheckCircle2,
   LogOut, User as UserIcon, Mail, Lock, ArrowRight, UserCheck,
-  CalendarDays, Trash2, Star
+  CalendarDays, Trash2, Star, CheckCircle, Info, Move, MousePointer2,
+  ChevronRight, Brain, Lightbulb, ZapOff
 } from 'lucide-react';
 import { Priority, Task, Habit, IdentityBoost, PanicSolution, RecurringTask, Frequency, User } from './types';
 import { geminiService } from './services/geminiService';
@@ -39,7 +40,7 @@ const SparkleBurst = () => {
         const dx = Math.cos((angle * Math.PI) / 180) * dist;
         const dy = Math.sin((angle * Math.PI) / 180) * dist;
         const size = 4 + Math.random() * 8;
-        const color = i % 2 === 0 ? '#f97316' : '#fbbf24'; // Orange or Amber
+        const color = i % 2 === 0 ? '#f97316' : '#fbbf24';
         return (
           <div
             key={i}
@@ -94,15 +95,23 @@ const App: React.FC = () => {
   const [showRecurringForm, setShowRecurringForm] = useState(false);
   const [newHabit, setNewHabit] = useState({ text: "", anchor: "", tinyAction: "" });
   const [newRecurring, setNewRecurring] = useState({ text: "", frequency: Frequency.DAILY, priority: Priority.Q2, energy: 'Média' as Task['energy'] });
+  
+  // Onboarding states
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [tutorialStep, setTutorialStep] = useState(0);
+  const [hasSeenPlanOnboarding, setHasSeenPlanOnboarding] = useState<boolean>(() => {
+    return localStorage.getItem('neuro-onboarding-plan') === 'true';
+  });
+  const [hasSeenHabitOnboarding, setHasSeenHabitOnboarding] = useState<boolean>(() => {
+    return localStorage.getItem('neuro-onboarding-habit') === 'true';
+  });
 
-  // Auth States
   const [isRegistering, setIsRegistering] = useState(false);
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authName, setAuthName] = useState("");
   const [isLoadingAuth, setIsLoadingAuth] = useState(false);
 
-  // Load Data for User
   useEffect(() => {
     if (!currentUser) return;
     const key = `neuro-data-${currentUser.id}`;
@@ -113,15 +122,15 @@ const App: React.FC = () => {
       setRecurringTasks(parsed.recurringTasks || []);
       setHabits(parsed.habits || []);
       setPoints(parsed.points || 0);
-    } else {
-      setTasks([]);
-      setRecurringTasks([]);
-      setHabits([]);
-      setPoints(0);
+    }
+    
+    // Check for general onboarding
+    const onboardingDone = localStorage.getItem(`neuro-onboarding-v1-${currentUser.id}`);
+    if (!onboardingDone) {
+      setTimeout(() => setShowTutorial(true), 1000);
     }
   }, [currentUser]);
 
-  // Save Data for User
   useEffect(() => {
     if (!currentUser) return;
     const key = `neuro-data-${currentUser.id}`;
@@ -143,14 +152,12 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [isTimerActive, timeLeft]);
 
-  // Logic to spawn tasks from recurring ones for the selected date
   useEffect(() => {
     if (!currentUser || recurringTasks.length === 0) return;
     
     setTasks(currentTasks => {
       let updated = [...currentTasks];
       let changed = false;
-
       recurringTasks.forEach(rec => {
         const alreadyExists = updated.find(t => t.text === rec.text && t.date === selectedDate);
         if (!alreadyExists) {
@@ -169,7 +176,6 @@ const App: React.FC = () => {
           }
         }
       });
-
       return changed ? updated : currentTasks;
     });
   }, [selectedDate, recurringTasks, currentUser]);
@@ -186,13 +192,9 @@ const App: React.FC = () => {
         localStorage.setItem('neuro-session', JSON.stringify(sessionUser));
         setCurrentUser(sessionUser);
       } else {
-        alert("Credenciais não encontradas. Tente cadastrar-se primeiro.");
+        alert("Credenciais não encontradas.");
       }
-    } catch (err) {
-      console.error("Erro no login:", err);
-    } finally {
-      setIsLoadingAuth(false);
-    }
+    } catch (err) { console.error(err); } finally { setIsLoadingAuth(false); }
   };
 
   const handleRegister = (e: React.FormEvent) => {
@@ -212,11 +214,7 @@ const App: React.FC = () => {
       const sessionUser = { id: newUser.id, name: newUser.name, email: newUser.email };
       localStorage.setItem('neuro-session', JSON.stringify(sessionUser));
       setCurrentUser(sessionUser);
-    } catch (err) {
-      console.error("Erro no cadastro:", err);
-    } finally {
-      setIsLoadingAuth(false);
-    }
+    } catch (err) { console.error(err); } finally { setIsLoadingAuth(false); }
   };
 
   const enterAsGuest = () => {
@@ -267,21 +265,6 @@ const App: React.FC = () => {
     setNewTaskText("");
   };
 
-  const handleDecompose = async (task: Task) => {
-    setIsDecomposing(true);
-    try {
-      const steps = await geminiService.decomposeTask(task.text);
-      setTasks(prev => prev.map(t => t.id === task.id ? { ...t, subtasks: steps } : t));
-      if (selectedTask?.id === task.id) {
-        setSelectedTask({ ...task, subtasks: steps });
-      }
-    } catch (error) {
-      console.error("Error decomposing task:", error);
-    } finally {
-      setIsDecomposing(false);
-    }
-  };
-
   const toggleTask = async (id: string) => {
     const task = tasks.find(t => t.id === id);
     if (!task) return;
@@ -291,6 +274,9 @@ const App: React.FC = () => {
       setTimeout(() => setJustCompletedId(null), 1200);
       setPoints(prev => prev + 15);
       setTasks(prev => prev.map(t => t.id === id ? { ...t, completed: true } : t));
+      if (selectedTask?.id === id) {
+        setSelectedTask(prev => prev ? { ...prev, completed: true } : null);
+      }
       try {
         const boostText = await geminiService.generateIdentityBoost(task.text);
         setIdentityBoost({ text: boostText, taskTitle: task.text });
@@ -298,7 +284,26 @@ const App: React.FC = () => {
       } catch (err) { console.error(err); }
     } else {
       setTasks(prev => prev.map(t => t.id === id ? { ...t, completed: false } : t));
+      if (selectedTask?.id === id) {
+        setSelectedTask(prev => prev ? { ...prev, completed: false } : null);
+      }
       setPoints(prev => Math.max(0, prev - 15));
+    }
+  };
+
+  const handleDecompose = async (task: Task) => {
+    if (!task) return;
+    setIsDecomposing(true);
+    try {
+      const steps = await geminiService.decomposeTask(task.text);
+      setTasks(prev => prev.map(t => t.id === task.id ? { ...t, subtasks: steps } : t));
+      if (selectedTask?.id === task.id) {
+        setSelectedTask(prev => prev ? { ...prev, subtasks: steps } : null);
+      }
+    } catch (err) {
+      console.error("Erro ao decompor tarefa:", err);
+    } finally {
+      setIsDecomposing(false);
     }
   };
 
@@ -309,6 +314,50 @@ const App: React.FC = () => {
     setPoints(p => p + 25);
   };
 
+  const toggleRecurringCheck = (rec: RecurringTask) => {
+    const existingTask = tasks.find(t => t.text === rec.text && t.date === selectedDate);
+    if (existingTask) {
+      if (!existingTask.completed) {
+        setSparklingId(rec.id);
+        setTimeout(() => setSparklingId(null), 1000);
+      }
+      toggleTask(existingTask.id);
+    } else {
+      const newTask: Task = {
+        id: crypto.randomUUID(),
+        text: rec.text,
+        priority: rec.priority,
+        energy: rec.energy,
+        completed: true,
+        subtasks: [],
+        date: selectedDate,
+        createdAt: Date.now()
+      };
+      setSparklingId(rec.id);
+      setTimeout(() => setSparklingId(null), 1000);
+      setTasks(prev => [...prev, newTask]);
+      setPoints(prev => prev + 15);
+    }
+  };
+
+  const dismissPlanOnboarding = () => {
+    setHasSeenPlanOnboarding(true);
+    localStorage.setItem('neuro-onboarding-plan', 'true');
+  };
+
+  const dismissHabitOnboarding = () => {
+    setHasSeenHabitOnboarding(true);
+    localStorage.setItem('neuro-onboarding-habit', 'true');
+  };
+
+  const completeTutorial = () => {
+    setShowTutorial(false);
+    if (currentUser) {
+      localStorage.setItem(`neuro-onboarding-v1-${currentUser.id}`, 'true');
+    }
+  };
+
+  const isDark = theme === 'dark';
   const neuroLevel = useMemo(() => {
     if (points < 100) return { title: "Iniciante Neural", next: 100 };
     if (points < 500) return { title: "Arquiteto de Hábitos", next: 500 };
@@ -316,7 +365,38 @@ const App: React.FC = () => {
     return { title: "Ninja da Neuroplasticidade", next: Infinity };
   }, [points]);
 
-  const isDark = theme === 'dark';
+  const tutorialSteps = [
+    {
+      title: "Seu cérebro em modo Executor",
+      desc: "O NeuroExecutor foi desenhado sobre pilares da neuropsicologia para apoiar suas funções executivas: planejamento, foco e inibição de distrações.",
+      icon: <BrainCircuit size={48} className="text-orange-500" />,
+      theory: "A procrastinação não é preguiça, é uma falha na regulação emocional do sistema límbico sobre o córtex pré-frontal."
+    },
+    {
+      title: "Ciclos Ultradianos",
+      desc: "O cérebro funciona em ondas de 90 minutos de alta atividade. Use o timer de Foco para respeitar sua biologia e evitar o burnout cognitivo.",
+      icon: <Timer size={48} className="text-orange-500" />,
+      theory: "Trabalhar em blocos de 90 min otimiza a ressíntese de neurotransmissores como acetilcolina e dopamina."
+    },
+    {
+      title: "Quebrando a Fricção",
+      desc: "Tarefas grandes geram medo. Nossa IA 'Decompor' transforma blocos pesados em micro-ações que seu cérebro não consegue rejeitar.",
+      icon: <Sparkles size={48} className="text-orange-500" />,
+      theory: "Micro-passos reduzem a amígdala (centro do medo) e ativam o sistema de busca estriatal."
+    },
+    {
+      title: "Protocolo de Resgate",
+      desc: "Travou? Use o Resgate Neural. A IA analisará seu obstáculo e fornecerá um protocolo imediato para sair da paralisia executiva.",
+      icon: <AlertTriangle size={48} className="text-orange-600" />,
+      theory: "O resgate externo atua como um 'andaimaria' (scaffolding) cognitivo para quando seus recursos internos estão baixos."
+    },
+    {
+      title: "Fortalecendo Sinapses",
+      desc: "Cada check gera XP. Os 'Identity Boosts' reforçam que você é alguém produtivo, mudando sua autoimagem a longo prazo.",
+      icon: <Award size={48} className="text-orange-500" />,
+      theory: "A neuroplasticidade ocorre através da repetição e recompensa. Celebrar vitórias fixa o novo comportamento."
+    }
+  ];
 
   if (!currentUser) {
     return (
@@ -325,7 +405,7 @@ const App: React.FC = () => {
           <div className="flex flex-col items-center mb-10 text-center">
             <SynapseLogo className="w-16 h-16 mb-6" />
             <h1 className={`text-4xl font-black italic tracking-tighter ${isDark ? 'text-orange-500' : 'text-orange-600'}`}>NEUROEXECUTOR</h1>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-2">Gestão Executiva Cerebral</p>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-2">Neurociência aplicada à execução</p>
           </div>
           <form onSubmit={isRegistering ? handleRegister : handleLogin} className="space-y-4">
             {isRegistering && (
@@ -490,8 +570,44 @@ const App: React.FC = () => {
           )}
 
           {activeTab === 'plan' && (
-            <div className="space-y-8 animate-in slide-in-from-bottom duration-500">
-               <h2 className="text-3xl font-black italic">Matriz de Decisão</h2>
+            <div className="space-y-8 animate-in slide-in-from-bottom duration-500 relative">
+               {!hasSeenPlanOnboarding && (
+                 <div className="absolute inset-0 z-[60] flex items-center justify-center p-4">
+                   <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm rounded-[40px]" />
+                   <div className={`relative w-full max-w-lg p-10 border rounded-[48px] shadow-2xl animate-in zoom-in-95 duration-500 ${isDark ? 'bg-[#0a1128] border-orange-500/40' : 'bg-white border-orange-200'}`}>
+                     <div className="flex items-center gap-4 mb-6">
+                       <div className="w-12 h-12 rounded-2xl bg-orange-600/20 text-orange-500 flex items-center justify-center">
+                         <Info size={28} />
+                       </div>
+                       <h3 className="text-2xl font-black italic tracking-tight">Otimize sua Estratégia</h3>
+                     </div>
+                     <div className="space-y-5 text-sm font-medium opacity-90 leading-relaxed">
+                       <div className="flex gap-4">
+                         <LayoutGrid className="text-orange-500 shrink-0" size={20} />
+                         <p><span className="font-bold text-orange-500">Matriz de Eisenhower:</span> Organize suas tarefas por Urgência e Importância para priorizar o que realmente importa para o seu cérebro.</p>
+                       </div>
+                       <div className="flex gap-4">
+                         <MousePointer2 className="text-orange-500 shrink-0" size={20} />
+                         <p><span className="font-bold text-orange-500">Drag & Drop:</span> Arraste as tarefas entre os quadrantes para redefinir prioridades instantaneamente.</p>
+                       </div>
+                       <div className="flex gap-4">
+                         <Play className="text-orange-500 shrink-0" size={20} />
+                         <p>Clique no botão <span className="bg-orange-600 p-1 rounded text-white inline-flex"><Play size={10} fill="currentColor"/></span> para levar qualquer tarefa diretamente para a aba de <span className="font-black italic">Foco</span>.</p>
+                       </div>
+                     </div>
+                     <button onClick={dismissPlanOnboarding} className="mt-10 w-full py-4 bg-orange-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-orange-900/40 hover:bg-orange-500 transition-all active:scale-[0.98]">
+                       Entendido!
+                     </button>
+                   </div>
+                 </div>
+               )}
+
+               <div className="flex items-center justify-between">
+                 <h2 className="text-3xl font-black italic">Matriz de Decisão</h2>
+                 <button onClick={() => setHasSeenPlanOnboarding(false)} className="text-slate-500 hover:text-orange-500 transition-colors">
+                   <Info size={20} />
+                 </button>
+               </div>
                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                  <MatrixQuadrant isDark={isDark} priority={Priority.Q1} title="Q1: Fazer Agora" desc="Urgente" tasks={dayTasks.filter(t => t.priority === Priority.Q1 && !t.completed)} onSelect={setSelectedTask} onTabChange={() => setActiveTab('execute')} onMoveTask={(tid, p) => setTasks(ts => ts.map(t => t.id === tid ? {...t, priority: p} : t))} />
                  <MatrixQuadrant isDark={isDark} priority={Priority.Q2} title="Q2: Estratégico" desc="Importante" tasks={dayTasks.filter(t => t.priority === Priority.Q2 && !t.completed)} onSelect={setSelectedTask} onTabChange={() => setActiveTab('execute')} onMoveTask={(tid, p) => setTasks(ts => ts.map(t => t.id === tid ? {...t, priority: p} : t))} />
@@ -502,7 +618,48 @@ const App: React.FC = () => {
           )}
 
           {activeTab === 'habits' && (
-            <div className="space-y-8 animate-in fade-in duration-500">
+            <div className="space-y-8 animate-in fade-in duration-500 relative">
+              {/* Habit Onboarding Overlay */}
+              {!hasSeenHabitOnboarding && (
+                <div className="absolute inset-0 z-[60] flex items-center justify-center p-4">
+                  <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-md rounded-[40px]" />
+                  <div className={`relative w-full max-w-xl p-10 border rounded-[48px] shadow-2xl animate-in zoom-in-95 duration-500 ${isDark ? 'bg-[#0a1128] border-orange-500/40' : 'bg-white border-orange-200'}`}>
+                    <div className="flex items-center gap-4 mb-6">
+                      <div className="w-12 h-12 rounded-2xl bg-orange-600/20 text-orange-500 flex items-center justify-center">
+                        <Target size={28} />
+                      </div>
+                      <h3 className="text-2xl font-black italic tracking-tight">Formação de Hábitos</h3>
+                    </div>
+                    
+                    <div className="space-y-6 text-sm">
+                      <div className="flex gap-4">
+                        <Anchor className="text-orange-500 shrink-0" size={24} />
+                        <div>
+                          <p className="font-bold text-orange-500 mb-1 uppercase text-[10px] tracking-widest">A Âncora (O Gatilho)</p>
+                          <p className="opacity-80">Não dependa da memória. Use um hábito que você já tem (ex: escovar dentes) como o gatilho para o novo. <span className="italic">"Depois de [Âncora], eu vou..."</span></p>
+                        </div>
+                      </div>
+                      
+                      <div className="flex gap-4">
+                        <Zap className="text-orange-500 shrink-0" size={24} />
+                        <div>
+                          <p className="font-bold text-orange-500 mb-1 uppercase text-[10px] tracking-widest">Micro-ação (Sem Fricção)</p>
+                          <p className="opacity-80">O cérebro odeia esforço. Reduza o hábito à sua forma mais simples. Se quer ler, a micro-ação é <span className="font-bold">"Ler 1 página"</span>. O objetivo é a consistência, não a intensidade.</p>
+                        </div>
+                      </div>
+
+                      <div className={`p-4 rounded-2xl border ${isDark ? 'bg-slate-900/50 border-orange-500/10' : 'bg-orange-50 border-orange-100'}`}>
+                         <p className="text-xs italic font-medium opacity-90"><span className="font-black text-orange-500">Ciência:</span> Cada 'Check' libera dopamina, sinalizando ao cérebro que este comportamento vale a pena ser repetido até virar automático.</p>
+                      </div>
+                    </div>
+
+                    <button onClick={dismissHabitOnboarding} className="mt-10 w-full py-4 bg-orange-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-orange-900/40 hover:bg-orange-500 transition-all active:scale-[0.98]">
+                      Entendido, vou aplicar!
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className={`col-span-2 border p-8 rounded-[40px] flex items-center justify-between ${isDark ? 'bg-[#0a1128] border-orange-500/30' : 'bg-white border-orange-100 shadow-lg'}`}>
                    <div>
@@ -526,7 +683,7 @@ const App: React.FC = () => {
 
               <div className="flex gap-2 justify-end">
                 <button onClick={() => setShowRecurringForm(!showRecurringForm)} className={`px-6 py-3 border rounded-2xl font-bold flex items-center gap-2 transition-all ${showRecurringForm ? 'bg-orange-600 text-white shadow-glow-orange border-orange-500' : 'border-slate-800'}`}> <Repeat size={18}/> Tarefa Fixa </button>
-                <button onClick={() => setShowHabitForm(!showHabitForm)} className={`px-6 py-3 bg-orange-600 text-white rounded-2xl font-bold flex items-center gap-2 transition-all`}> <Flame size={18}/> Novo Hábito </button>
+                <button onClick={() => { if(!hasSeenHabitOnboarding) return; setShowHabitForm(!showHabitForm); }} className={`px-6 py-3 bg-orange-600 text-white rounded-2xl font-bold flex items-center gap-2 transition-all`}> <Flame size={18}/> Novo Hábito </button>
               </div>
 
               {showRecurringForm && (
@@ -558,9 +715,18 @@ const App: React.FC = () => {
                 <div className={`p-8 border rounded-[32px] animate-in slide-in-from-top duration-300 ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200 shadow-xl'}`}>
                   <h4 className="font-black uppercase text-sm mb-4">Novo Hábito Atômico</h4>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <input className={`p-4 rounded-xl border outline-none ${isDark ? 'bg-slate-800 border-slate-700 focus:border-orange-500' : 'bg-slate-50 border-slate-200 focus:border-orange-500'}`} placeholder="O Hábito" value={newHabit.text} onChange={e => setNewHabit({...newHabit, text: e.target.value})} />
-                    <input className={`p-4 rounded-xl border outline-none ${isDark ? 'bg-slate-800 border-slate-700 focus:border-orange-500' : 'bg-slate-50 border-slate-200 focus:border-orange-500'}`} placeholder="Âncora (Quando...)" value={newHabit.anchor} onChange={e => setNewHabit({...newHabit, anchor: e.target.value})} />
-                    <input className={`p-4 rounded-xl border outline-none ${isDark ? 'bg-slate-800 border-slate-700 focus:border-orange-500' : 'bg-slate-50 border-slate-200 focus:border-orange-500'}`} placeholder="Micro-ação" value={newHabit.tinyAction} onChange={e => setNewHabit({...newHabit, tinyAction: e.target.value})} />
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase text-slate-500 px-2">Hábito Alvo</label>
+                      <input className={`w-full p-4 rounded-xl border outline-none ${isDark ? 'bg-slate-800 border-slate-700 focus:border-orange-500' : 'bg-slate-50 border-slate-200 focus:border-orange-500'}`} placeholder="Ex: Ler mais" value={newHabit.text} onChange={e => setNewHabit({...newHabit, text: e.target.value})} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase text-slate-500 px-2">Âncora (Depois de...)</label>
+                      <input className={`w-full p-4 rounded-xl border outline-none ${isDark ? 'bg-slate-800 border-slate-700 focus:border-orange-500' : 'bg-slate-50 border-slate-200 focus:border-orange-500'}`} placeholder="Ex: Tomar café" value={newHabit.anchor} onChange={e => setNewHabit({...newHabit, anchor: e.target.value})} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase text-slate-500 px-2">Micro-ação (Mínimo)</label>
+                      <input className={`w-full p-4 rounded-xl border outline-none ${isDark ? 'bg-slate-800 border-slate-700 focus:border-orange-500' : 'bg-slate-50 border-slate-200 focus:border-orange-500'}`} placeholder="Ex: Ler 1 página" value={newHabit.tinyAction} onChange={e => setNewHabit({...newHabit, tinyAction: e.target.value})} />
+                    </div>
                   </div>
                   <button onClick={() => {
                     if (!newHabit.text) return;
@@ -575,22 +741,29 @@ const App: React.FC = () => {
                 <div className="space-y-4">
                   <h3 className="text-xs font-black uppercase flex items-center gap-2 text-slate-500"><Repeat size={14}/> Rotinas Fixas</h3>
                   <div className="grid grid-cols-1 gap-3">
-                    {recurringTasks.map(rec => (
-                      <div key={rec.id} className={`group flex items-center justify-between p-5 rounded-[28px] border transition-all ${isDark ? 'bg-[#0a1128] border-slate-800 hover:border-orange-500/30' : 'bg-white border-slate-200 shadow-sm'}`}>
-                        <div className="flex items-center gap-4">
-                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDark ? 'bg-slate-800 text-orange-500' : 'bg-slate-50 text-orange-600'}`}>
-                            <CalendarDays size={20} />
+                    {recurringTasks.map(rec => {
+                      const isCompletedToday = tasks.some(t => t.text === rec.text && t.date === selectedDate && t.completed);
+                      return (
+                        <div key={rec.id} className={`relative group flex items-center justify-between p-5 rounded-[28px] border transition-all overflow-hidden ${isDark ? 'bg-[#0a1128] border-slate-800' : 'bg-white border-slate-200 shadow-sm'} ${isCompletedToday ? 'opacity-60 grayscale-[0.5]' : ''} ${sparklingId === rec.id ? 'animate-card-win' : ''}`}>
+                          {sparklingId === rec.id && <SparkleBurst />}
+                          <div className="flex items-center gap-4">
+                            <button 
+                              onClick={() => toggleRecurringCheck(rec)}
+                              className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all border-2 ${isCompletedToday ? 'bg-orange-600 border-orange-500 text-white' : 'border-slate-800 text-slate-700 hover:border-orange-500'}`}
+                            >
+                              {isCompletedToday ? <CheckCircle size={24} /> : <div className="w-5 h-5 rounded-full border-2 border-current opacity-30" />}
+                            </button>
+                            <div>
+                              <p className={`font-black text-sm transition-all ${isCompletedToday ? 'line-through opacity-50' : ''}`}>{rec.text}</p>
+                              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{rec.frequency} • {rec.priority}</span>
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-black text-sm">{rec.text}</p>
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{rec.frequency} • {rec.priority}</span>
-                          </div>
+                          <button onClick={() => setRecurringTasks(ts => ts.filter(t => t.id !== rec.id))} className="opacity-0 group-hover:opacity-100 p-2 text-slate-600 hover:text-red-500 transition-all">
+                            <Trash2 size={18} />
+                          </button>
                         </div>
-                        <button onClick={() => setRecurringTasks(ts => ts.filter(t => t.id !== rec.id))} className="opacity-0 group-hover:opacity-100 p-2 text-slate-600 hover:text-red-500 transition-all">
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                     {recurringTasks.length === 0 && <p className="text-xs text-slate-500 italic py-8 text-center border-2 border-dashed border-slate-800/20 rounded-[32px]">Nenhuma rotina fixa configurada.</p>}
                   </div>
                 </div>
@@ -647,6 +820,58 @@ const App: React.FC = () => {
           )}
         </div>
       </main>
+
+      {/* Tutorial / Onboarding Modal */}
+      {showTutorial && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-500" />
+          <div className={`relative w-full max-w-2xl border rounded-[48px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-500 ${isDark ? 'bg-[#0a1128] border-orange-500/30' : 'bg-white border-orange-100'}`}>
+            <div className="absolute top-0 left-0 w-full h-1 bg-slate-800">
+              <div className="h-full bg-orange-500 transition-all duration-500" style={{ width: `${((tutorialStep + 1) / tutorialSteps.length) * 100}%` }}></div>
+            </div>
+            
+            <div className="p-10 md:p-14 text-center space-y-8">
+              <div className="flex justify-center mb-6">
+                <div className="w-24 h-24 rounded-[32px] bg-orange-600/10 flex items-center justify-center animate-glow-orange">
+                  {tutorialSteps[tutorialStep].icon}
+                </div>
+              </div>
+              
+              <div className="space-y-4">
+                <h2 className="text-3xl font-black italic tracking-tight">{tutorialSteps[tutorialStep].title}</h2>
+                <p className={`text-lg leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{tutorialSteps[tutorialStep].desc}</p>
+              </div>
+              
+              <div className={`p-6 rounded-3xl border ${isDark ? 'bg-slate-900/50 border-orange-500/20' : 'bg-orange-50 border-orange-100'}`}>
+                <div className="flex items-start gap-3 text-left">
+                  <Lightbulb size={20} className="text-orange-500 shrink-0 mt-1" />
+                  <p className="text-xs font-bold italic opacity-80 leading-snug">
+                    <span className="uppercase text-[10px] tracking-widest block mb-1 text-orange-500">Teoria Neural</span>
+                    {tutorialSteps[tutorialStep].theory}
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex gap-4 pt-4">
+                <button onClick={completeTutorial} className="px-8 py-4 text-xs font-black uppercase text-slate-500 hover:text-orange-500 transition-colors">Pular Tudo</button>
+                <button 
+                  onClick={() => {
+                    if (tutorialStep < tutorialSteps.length - 1) {
+                      setTutorialStep(s => s + 1);
+                    } else {
+                      completeTutorial();
+                    }
+                  }} 
+                  className="flex-1 py-4 bg-orange-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-orange-900/40 hover:bg-orange-500 transition-all flex items-center justify-center gap-2"
+                >
+                  {tutorialStep === tutorialSteps.length - 1 ? "Começar Execução" : "Próximo Passo"}
+                  <ChevronRight size={20} />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {panicTask && (
         <div className="fixed inset-0 backdrop-blur-xl z-[200] flex items-center justify-center p-4 bg-[#020617]/95">
