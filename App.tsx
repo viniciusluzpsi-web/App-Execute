@@ -7,10 +7,11 @@ import {
   Repeat, Award, TrendingUp, Sun, Moon, CheckCircle2,
   LogOut, User as UserIcon, Mail, Lock, ArrowRight, UserCheck,
   CalendarDays, Trash2, Star, CheckCircle, Info, Move, MousePointer2,
-  ChevronRight, Brain, Lightbulb, ZapOff
+  ChevronRight, Brain, Lightbulb, ZapOff, Cloud, CloudCheck, CloudOff
 } from 'lucide-react';
 import { Priority, Task, Habit, IdentityBoost, PanicSolution, RecurringTask, Frequency, User } from './types';
 import { geminiService } from './services/geminiService';
+import { syncService } from './services/syncService';
 
 const SynapseLogo = ({ className = "" }: { className?: string }) => (
   <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" className={`shrink-0 ${className}`}>
@@ -96,6 +97,9 @@ const App: React.FC = () => {
   const [newHabit, setNewHabit] = useState({ text: "", anchor: "", tinyAction: "" });
   const [newRecurring, setNewRecurring] = useState({ text: "", frequency: Frequency.DAILY, priority: Priority.Q2, energy: 'Média' as Task['energy'] });
   
+  // Sync states
+  const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
+  
   // Onboarding states
   const [showTutorial, setShowTutorial] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
@@ -112,17 +116,36 @@ const App: React.FC = () => {
   const [authName, setAuthName] = useState("");
   const [isLoadingAuth, setIsLoadingAuth] = useState(false);
 
+  // Initial Load from Cloud or Local
   useEffect(() => {
     if (!currentUser) return;
-    const key = `neuro-data-${currentUser.id}`;
-    const saved = localStorage.getItem(key);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      setTasks(parsed.tasks || []);
-      setRecurringTasks(parsed.recurringTasks || []);
-      setHabits(parsed.habits || []);
-      setPoints(parsed.points || 0);
-    }
+    
+    const loadInitialData = async () => {
+      setSyncStatus('syncing');
+      // 1. Tenta carregar da nuvem primeiro
+      const cloudData = await syncService.pullData(currentUser.email);
+      if (cloudData) {
+        setTasks(cloudData.tasks || []);
+        setRecurringTasks(cloudData.recurringTasks || []);
+        setHabits(cloudData.habits || []);
+        setPoints(cloudData.points || 0);
+        setSyncStatus('synced');
+      } else {
+        // 2. Fallback para local se nuvem falhar ou estiver vazia
+        const key = `neuro-data-${currentUser.id}`;
+        const saved = localStorage.getItem(key);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          setTasks(parsed.tasks || []);
+          setRecurringTasks(parsed.recurringTasks || []);
+          setHabits(parsed.habits || []);
+          setPoints(parsed.points || 0);
+        }
+        setSyncStatus('synced');
+      }
+    };
+
+    loadInitialData();
     
     // Check for general onboarding
     const onboardingDone = localStorage.getItem(`neuro-onboarding-v1-${currentUser.id}`);
@@ -131,11 +154,25 @@ const App: React.FC = () => {
     }
   }, [currentUser]);
 
+  // Sync to Cloud and Local on changes
   useEffect(() => {
     if (!currentUser) return;
-    const key = `neuro-data-${currentUser.id}`;
-    const data = { tasks, recurringTasks, habits, points };
-    localStorage.setItem(key, JSON.stringify(data));
+    
+    const saveData = async () => {
+      setSyncStatus('syncing');
+      const data = { tasks, recurringTasks, habits, points };
+      
+      // Salva local
+      const key = `neuro-data-${currentUser.id}`;
+      localStorage.setItem(key, JSON.stringify(data));
+      
+      // Tenta salvar na nuvem
+      const success = await syncService.pushData(currentUser.email, data);
+      setSyncStatus(success ? 'synced' : 'error');
+    };
+
+    const debounce = setTimeout(saveData, 2000); // Evita chamadas excessivas
+    return () => clearTimeout(debounce);
   }, [tasks, recurringTasks, habits, points, currentUser]);
 
   useEffect(() => {
@@ -180,37 +217,63 @@ const App: React.FC = () => {
     });
   }, [selectedDate, recurringTasks, currentUser]);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!authEmail || !authPassword) return;
     setIsLoadingAuth(true);
     try {
-      const users = JSON.parse(localStorage.getItem('neuro-users') || '[]');
-      const user = users.find((u: any) => u.email.toLowerCase() === authEmail.toLowerCase() && u.password === authPassword);
-      if (user) {
-        const sessionUser = { id: user.id, name: user.name, email: user.email };
+      // 1. Tenta encontrar o usuário na nuvem (sincronização global)
+      const cloudUser = await syncService.findUser(authEmail);
+      
+      if (cloudUser && cloudUser.password === authPassword) {
+        const sessionUser = { id: cloudUser.id, name: cloudUser.name, email: cloudUser.email };
         localStorage.setItem('neuro-session', JSON.stringify(sessionUser));
         setCurrentUser(sessionUser);
       } else {
-        alert("Credenciais não encontradas.");
+        // 2. Fallback para usuários locais antigos se nuvem falhar
+        const users = JSON.parse(localStorage.getItem('neuro-users') || '[]');
+        const user = users.find((u: any) => u.email.toLowerCase() === authEmail.toLowerCase() && u.password === authPassword);
+        if (user) {
+          const sessionUser = { id: user.id, name: user.name, email: user.email };
+          localStorage.setItem('neuro-session', JSON.stringify(sessionUser));
+          setCurrentUser(sessionUser);
+          // Opcional: Migrar para nuvem agora
+          await syncService.saveUser(user);
+        } else {
+          alert("Credenciais não encontradas ou rede indisponível.");
+        }
       }
     } catch (err) { console.error(err); } finally { setIsLoadingAuth(false); }
   };
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!authEmail || !authPassword || !authName) return;
     setIsLoadingAuth(true);
     try {
-      const users = JSON.parse(localStorage.getItem('neuro-users') || '[]');
-      if (users.find((u: any) => u.email.toLowerCase() === authEmail.toLowerCase())) {
-        alert("Este email já está em uso.");
+      // 1. Verifica se já existe na nuvem
+      const existing = await syncService.findUser(authEmail);
+      if (existing) {
+        alert("Este email já está em uso na rede sináptica.");
         setIsLoadingAuth(false);
         return;
       }
+      
       const newUser = { id: crypto.randomUUID(), name: authName, email: authEmail, password: authPassword };
+      
+      // 2. Salva na nuvem (Sincronização global)
+      const success = await syncService.saveUser(newUser);
+      if (!success) {
+        alert("Erro ao conectar com a nuvem. Tente novamente.");
+        setIsLoadingAuth(false);
+        return;
+      }
+
+      // 3. Salva local para compatibilidade
+      const users = JSON.parse(localStorage.getItem('neuro-users') || '[]');
       users.push(newUser);
       localStorage.setItem('neuro-users', JSON.stringify(users));
+      
       const sessionUser = { id: newUser.id, name: newUser.name, email: newUser.email };
       localStorage.setItem('neuro-session', JSON.stringify(sessionUser));
       setCurrentUser(sessionUser);
@@ -449,13 +512,19 @@ const App: React.FC = () => {
             <h1 className={`text-2xl font-black flex items-center gap-3 italic tracking-tight ${isDark ? 'text-orange-500' : 'text-orange-600'}`}>
               <SynapseLogo /> EXECUTE
             </h1>
-            <div className="mt-6 flex items-center gap-3 group">
+            
+            <div className="mt-6 flex items-center gap-3 group relative">
               <div className="w-10 h-10 rounded-xl bg-orange-600/20 text-orange-500 flex items-center justify-center font-black">
                 {currentUser.name[0].toUpperCase()}
               </div>
               <div className="flex-1 overflow-hidden">
                 <p className="text-xs font-black truncate">{currentUser.name}</p>
-                <p className="text-[9px] text-slate-500 font-bold uppercase truncate">{currentUser.email}</p>
+                <div className="flex items-center gap-1.5">
+                   {syncStatus === 'synced' && <CloudCheck size={10} className="text-green-500" />}
+                   {syncStatus === 'syncing' && <Cloud size={10} className="text-orange-500 animate-pulse" />}
+                   {syncStatus === 'error' && <CloudOff size={10} className="text-red-500" />}
+                   <p className="text-[9px] text-slate-500 font-bold uppercase truncate">{syncStatus === 'synced' ? 'Sincronizado' : syncStatus === 'syncing' ? 'Sincronizando' : 'Offline'}</p>
+                </div>
               </div>
             </div>
           </div>
