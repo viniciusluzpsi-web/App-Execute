@@ -9,8 +9,11 @@ export enum Priority {
 export enum Frequency {
   DAILY = 'Diário',
   WEEKLY = 'Semanal',
-  MONTHLY = 'Mensal'
+  MONTHLY = 'Mensal',
+  ANNUALLY = 'Anual'
 }
+
+export type BrainCapacity = 'Exausto' | 'Neutro' | 'Hiperfocado';
 
 export interface User {
   id: string;
@@ -18,16 +21,12 @@ export interface User {
   email: string;
 }
 
-export interface Subtask {
-  text: string;
-  completed: boolean;
-}
-
 export interface Task {
   id: string;
   text: string;
   priority: Priority;
   energy: 'Baixa' | 'Média' | 'Alta';
+  capacityNeeded: BrainCapacity; // Novo: Baseado no PDF
   completed: boolean;
   subtasks: string[];
   date: string;
@@ -50,6 +49,12 @@ export interface Habit {
   tinyAction: string;
   streak: number;
   lastCompleted: string | null;
+}
+
+export interface DopamenuItem {
+  category: 'Starter' | 'Main' | 'Side' | 'Dessert';
+  label: string;
+  description: string;
 }
 
 export interface IdentityBoost {

@@ -1,8 +1,8 @@
 
 import { User, Task, Habit, RecurringTask } from "../types";
 
-// Usando um KV Store público para demonstração de sincronização real entre dispositivos
-const BASE_URL = "https://kvdb.io/N1Hn8f6yGv9j9z9z9z9z9z/"; // Bucket simulado para o NeuroExecutor
+// Bucket de produção único para o NeuroExecutor V1
+const BASE_URL = "https://kvdb.io/NeuroExecutor_V1_Production_Cloud_777/";
 
 async function hashString(str: string) {
   const encoder = new TextEncoder();
@@ -15,7 +15,6 @@ export const syncService = {
   async saveUser(user: any) {
     try {
       const key = await hashString(user.email);
-      // Salva a existência do usuário para o login reconhecer em outros dispositivos
       await fetch(`${BASE_URL}user_${key}`, {
         method: 'POST',
         body: JSON.stringify({ id: user.id, name: user.name, email: user.email, password: user.password })

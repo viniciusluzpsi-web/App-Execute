@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Timer, LayoutGrid, RefreshCw, ListTodo, Zap, AlertTriangle, 
   Plus, X, Trophy, Play, Pause, RotateCcw, 
@@ -7,11 +7,22 @@ import {
   Repeat, Award, TrendingUp, Sun, Moon, CheckCircle2,
   LogOut, User as UserIcon, Mail, Lock, ArrowRight, UserCheck,
   CalendarDays, Trash2, Star, CheckCircle, Info, Move, MousePointer2,
-  ChevronRight, Brain, Lightbulb, ZapOff, Cloud, CloudCheck, CloudOff
+  ChevronRight, Brain, Lightbulb, ZapOff, Cloud, CloudCheck, CloudOff,
+  Coffee, Utensils, Waves, Users, Wind, Battery, BatteryLow, BatteryMedium, BatteryFull,
+  Check, ArrowLeft, GripVertical, Wand2, Calendar, HelpCircle, Volume2, VolumeX
 } from 'lucide-react';
-import { Priority, Task, Habit, IdentityBoost, PanicSolution, RecurringTask, Frequency, User } from './types';
+import { Priority, Task, Habit, IdentityBoost, PanicSolution, RecurringTask, Frequency, User, BrainCapacity, DopamenuItem } from './types';
 import { geminiService } from './services/geminiService';
 import { syncService } from './services/syncService';
+
+// Sound Assets (Standard UI sounds)
+const SOUNDS = {
+  TASK_COMPLETE: 'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3',
+  HABIT_COMPLETE: 'https://assets.mixkit.co/active_storage/sfx/2013/2013-preview.mp3',
+  TIMER_START: 'https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3',
+  TIMER_END: 'https://assets.mixkit.co/active_storage/sfx/2018/2018-preview.mp3',
+  XP_GAIN: 'https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3'
+};
 
 const SynapseLogo = ({ className = "" }: { className?: string }) => (
   <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" className={`shrink-0 ${className}`}>
@@ -22,8 +33,6 @@ const SynapseLogo = ({ className = "" }: { className?: string }) => (
       </linearGradient>
     </defs>
     <circle cx="16" cy="16" r="14" fill="currentColor" fillOpacity="0.05" />
-    <path d="M16 8V4M16 28V24M8 16H4M28 16H24M10.3 10.3L7.5 7.5M24.5 24.5L21.7 21.7M10.3 21.7L7.5 24.5M24.5 7.5L21.7 10.3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="opacity-40" />
-    <path d="M22 10C24 12 25 15 25 18C25 22.4183 20.9706 26 16 26" stroke="url(#logo-grad-fire)" strokeWidth="2" strokeLinecap="round" className="spark-line" />
     <circle cx="16" cy="16" r="6" stroke="url(#logo-grad-fire)" strokeWidth="2" className="synapse-core" />
     <circle cx="16" cy="16" r="3" fill="url(#logo-grad-fire)" className="synapse-core" />
     <path d="M16 16L26 6" stroke="url(#logo-grad-fire)" strokeWidth="2.5" strokeLinecap="round" className="opacity-80" />
@@ -31,996 +40,944 @@ const SynapseLogo = ({ className = "" }: { className?: string }) => (
   </svg>
 );
 
-const SparkleBurst = () => {
-  const particles = Array.from({ length: 12 });
-  return (
-    <div className="absolute inset-0 pointer-events-none z-20 flex items-center justify-center">
-      {particles.map((_, i) => {
-        const angle = (i / particles.length) * 360;
-        const dist = 50 + Math.random() * 50;
-        const dx = Math.cos((angle * Math.PI) / 180) * dist;
-        const dy = Math.sin((angle * Math.PI) / 180) * dist;
-        const size = 4 + Math.random() * 8;
-        const color = i % 2 === 0 ? '#f97316' : '#fbbf24';
-        return (
-          <div
-            key={i}
-            className="absolute animate-particle rounded-full"
-            style={{
-              width: size,
-              height: size,
-              backgroundColor: color,
-              '--dx': `${dx}px`,
-              '--dy': `${dy}px`,
-            } as any}
-          />
-        );
-      })}
-    </div>
-  );
-};
-
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     try {
       const saved = localStorage.getItem('neuro-session');
       return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
+    } catch { return null; }
   });
 
-  const [activeTab, setActiveTab] = useState<'execute' | 'plan' | 'habits' | 'capture'>('execute');
+  // Sound Control
+  const [soundEnabled, setSoundEnabled] = useState(true);
+
+  const playAudio = useCallback((soundUrl: string) => {
+    if (!soundEnabled) return;
+    const audio = new Audio(soundUrl);
+    audio.volume = 0.4;
+    audio.play().catch(e => console.debug("Audio play blocked by browser interaction policy"));
+  }, [soundEnabled]);
+
+  // State Management
+  const [activeTab, setActiveTab] = useState<'execute' | 'plan' | 'habits' | 'capture' | 'dopamenu'>('execute');
   const [tasks, setTasks] = useState<Task[]>([]);
   const [recurringTasks, setRecurringTasks] = useState<RecurringTask[]>([]);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [points, setPoints] = useState(0);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    return (localStorage.getItem('neuro-theme') as 'light' | 'dark') || 'dark';
-  });
+  const [selectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [theme] = useState<'light' | 'dark'>(() => (localStorage.getItem('neuro-theme') as 'light' | 'dark') || 'dark');
   
+  const [dopamenuItems, setDopamenuItems] = useState<DopamenuItem[]>([
+    { category: 'Starter', label: 'Meditação 2 min', description: 'Vitória rápida para baixar o cortisol.' },
+    { category: 'Starter', label: 'Arrumar Cama', description: 'Sinaliza ordem para o córtex pré-frontal.' },
+    { category: 'Main', label: 'Exercício Aeróbico', description: 'Pico de dopamina sustentado por 3h.' },
+    { category: 'Main', label: 'Leitura Focada', description: 'Recarga profunda de significado.' },
+    { category: 'Side', label: 'Música Ambiente', description: 'Reduz o ruído cognitivo de fundo.' },
+    { category: 'Side', label: 'Body Doubling', description: 'Presença virtual para ancoragem social.' },
+    { category: 'Dessert', label: 'Ver um Meme', description: 'Micro-dose indulgente (usar com moderação).' },
+    { category: 'Dessert', label: 'Pausa para Café', description: 'Estímulo rápido de vigilância.' },
+  ]);
+
+  // Form States
+  const [showHabitForm, setShowHabitForm] = useState(false);
+  const [habitForm, setHabitForm] = useState({ text: '', anchor: '', tinyAction: '' });
+  const [showRecurringForm, setShowRecurringForm] = useState(false);
+  const [recurringForm, setRecurringForm] = useState({ text: '', frequency: Frequency.DAILY, energy: 'Baixa' as Task['energy'] });
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  const [captureEnergy, setCaptureEnergy] = useState<Task['energy']>('Média');
+
+  // Tutorial States
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [tutorialStep, setTutorialStep] = useState(0);
+  const [showPlanTutorial, setShowPlanTutorial] = useState(false);
+  const [planTutorialStep, setPlanTutorialStep] = useState(0);
+
+  // Timer & UI States
   const [timeLeft, setTimeLeft] = useState(90 * 60);
   const [isTimerActive, setIsTimerActive] = useState(false);
-  const [identityBoost, setIdentityBoost] = useState<IdentityBoost | null>(null);
   const [panicTask, setPanicTask] = useState<Task | null>(null);
   const [panicSolution, setPanicSolution] = useState<PanicSolution | null>(null);
   const [isRescuing, setIsRescuing] = useState(false);
   const [isDecomposing, setIsDecomposing] = useState(false);
-  const [justCompletedId, setJustCompletedId] = useState<string | null>(null);
-  const [sparklingId, setSparklingId] = useState<string | null>(null);
   const [newTaskText, setNewTaskText] = useState("");
   const [obstacleInput, setObstacleInput] = useState("");
-  const [showHabitForm, setShowHabitForm] = useState(false);
-  const [showRecurringForm, setShowRecurringForm] = useState(false);
-  const [newHabit, setNewHabit] = useState({ text: "", anchor: "", tinyAction: "" });
-  const [newRecurring, setNewRecurring] = useState({ text: "", frequency: Frequency.DAILY, priority: Priority.Q2, energy: 'Média' as Task['energy'] });
-  
-  // Sync states
+  const [currentArousal, setCurrentArousal] = useState<BrainCapacity>('Neutro');
+  const [isBodyDoubling, setIsBodyDoubling] = useState(false);
+  const [showBreathingPause, setShowBreathingPause] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
   
-  // Onboarding states
-  const [showTutorial, setShowTutorial] = useState(false);
-  const [tutorialStep, setTutorialStep] = useState(0);
-  const [hasSeenPlanOnboarding, setHasSeenPlanOnboarding] = useState<boolean>(() => {
-    return localStorage.getItem('neuro-onboarding-plan') === 'true';
-  });
-  const [hasSeenHabitOnboarding, setHasSeenHabitOnboarding] = useState<boolean>(() => {
-    return localStorage.getItem('neuro-onboarding-habit') === 'true';
-  });
-
+  // Auth States
   const [isRegistering, setIsRegistering] = useState(false);
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authName, setAuthName] = useState("");
   const [isLoadingAuth, setIsLoadingAuth] = useState(false);
 
-  // Initial Load from Cloud or Local
+  // Initial Tutorial Check
   useEffect(() => {
-    if (!currentUser) return;
-    
-    const loadInitialData = async () => {
-      setSyncStatus('syncing');
-      // 1. Tenta carregar da nuvem primeiro
-      const cloudData = await syncService.pullData(currentUser.email);
-      if (cloudData) {
-        setTasks(cloudData.tasks || []);
-        setRecurringTasks(cloudData.recurringTasks || []);
-        setHabits(cloudData.habits || []);
-        setPoints(cloudData.points || 0);
-        setSyncStatus('synced');
-      } else {
-        // 2. Fallback para local se nuvem falhar ou estiver vazia
-        const key = `neuro-data-${currentUser.id}`;
-        const saved = localStorage.getItem(key);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          setTasks(parsed.tasks || []);
-          setRecurringTasks(parsed.recurringTasks || []);
-          setHabits(parsed.habits || []);
-          setPoints(parsed.points || 0);
-        }
-        setSyncStatus('synced');
-      }
-    };
-
-    loadInitialData();
-    
-    // Check for general onboarding
-    const onboardingDone = localStorage.getItem(`neuro-onboarding-v1-${currentUser.id}`);
-    if (!onboardingDone) {
-      setTimeout(() => setShowTutorial(true), 1000);
+    if (currentUser) {
+      const hasSeen = localStorage.getItem(`neuro-tutorial-${currentUser.id}`);
+      if (!hasSeen) setShowTutorial(true);
     }
   }, [currentUser]);
 
-  // Sync to Cloud and Local on changes
+  // Plan Tutorial Check
+  useEffect(() => {
+    if (activeTab === 'plan' && currentUser) {
+      const hasSeen = localStorage.getItem(`neuro-plan-tutorial-${currentUser.id}`);
+      if (!hasSeen) setShowPlanTutorial(true);
+    }
+  }, [activeTab, currentUser]);
+
+  // Sync Logic
   useEffect(() => {
     if (!currentUser) return;
-    
-    const saveData = async () => {
+    const loadData = async () => {
       setSyncStatus('syncing');
-      const data = { tasks, recurringTasks, habits, points };
-      
-      // Salva local
-      const key = `neuro-data-${currentUser.id}`;
-      localStorage.setItem(key, JSON.stringify(data));
-      
-      // Tenta salvar na nuvem
-      const success = await syncService.pushData(currentUser.email, data);
-      setSyncStatus(success ? 'synced' : 'error');
+      const cloud = await syncService.pullData(currentUser.email);
+      if (cloud) {
+        if (cloud.tasks) setTasks(cloud.tasks);
+        if (cloud.recurringTasks) setRecurringTasks(cloud.recurringTasks);
+        if (cloud.habits) setHabits(cloud.habits);
+        if (cloud.points !== undefined) setPoints(cloud.points);
+        if (cloud.dopamenuItems) setDopamenuItems(cloud.dopamenuItems);
+      }
+      setSyncStatus('synced');
     };
-
-    const debounce = setTimeout(saveData, 2000); // Evita chamadas excessivas
-    return () => clearTimeout(debounce);
-  }, [tasks, recurringTasks, habits, points, currentUser]);
+    loadData();
+  }, [currentUser]);
 
   useEffect(() => {
-    localStorage.setItem('neuro-theme', theme);
-  }, [theme]);
+    if (!currentUser || currentUser.id === 'guest') return;
+    const save = async () => {
+      setSyncStatus('syncing');
+      const success = await syncService.pushData(currentUser.email, { 
+        tasks, recurringTasks, habits, points, dopamenuItems 
+      });
+      setSyncStatus(success ? 'synced' : 'error');
+    };
+    const t = setTimeout(save, 1500);
+    return () => clearTimeout(t);
+  }, [tasks, recurringTasks, habits, points, dopamenuItems, currentUser]);
 
   useEffect(() => {
     let interval: any = null;
     if (isTimerActive && timeLeft > 0) {
       interval = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
-    } else {
-      clearInterval(interval);
+    } else if (timeLeft === 0 && isTimerActive) {
+      setIsTimerActive(false);
+      setShowBreathingPause(true);
+      playAudio(SOUNDS.TIMER_END);
     }
     return () => clearInterval(interval);
-  }, [isTimerActive, timeLeft]);
+  }, [isTimerActive, timeLeft, playAudio]);
 
-  useEffect(() => {
-    if (!currentUser || recurringTasks.length === 0) return;
-    
-    setTasks(currentTasks => {
-      let updated = [...currentTasks];
-      let changed = false;
-      recurringTasks.forEach(rec => {
-        const alreadyExists = updated.find(t => t.text === rec.text && t.date === selectedDate);
-        if (!alreadyExists) {
-          if (rec.frequency === Frequency.DAILY) {
-            updated.push({
-              id: crypto.randomUUID(),
-              text: rec.text,
-              priority: rec.priority,
-              energy: rec.energy,
-              completed: false,
-              subtasks: [],
-              date: selectedDate,
-              createdAt: Date.now()
-            });
-            changed = true;
-          }
-        }
-      });
-      return changed ? updated : currentTasks;
-    });
-  }, [selectedDate, recurringTasks, currentUser]);
+  const toggleTimer = () => {
+    const newState = !isTimerActive;
+    setIsTimerActive(newState);
+    if (newState) {
+      playAudio(SOUNDS.TIMER_START);
+    }
+  };
 
+  // Actions
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!authEmail || !authPassword) return;
     setIsLoadingAuth(true);
-    try {
-      // 1. Tenta encontrar o usuário na nuvem (sincronização global)
-      const cloudUser = await syncService.findUser(authEmail);
-      
-      if (cloudUser && cloudUser.password === authPassword) {
-        const sessionUser = { id: cloudUser.id, name: cloudUser.name, email: cloudUser.email };
-        localStorage.setItem('neuro-session', JSON.stringify(sessionUser));
-        setCurrentUser(sessionUser);
-      } else {
-        // 2. Fallback para usuários locais antigos se nuvem falhar
-        const users = JSON.parse(localStorage.getItem('neuro-users') || '[]');
-        const user = users.find((u: any) => u.email.toLowerCase() === authEmail.toLowerCase() && u.password === authPassword);
-        if (user) {
-          const sessionUser = { id: user.id, name: user.name, email: user.email };
-          localStorage.setItem('neuro-session', JSON.stringify(sessionUser));
-          setCurrentUser(sessionUser);
-          // Opcional: Migrar para nuvem agora
-          await syncService.saveUser(user);
-        } else {
-          alert("Credenciais não encontradas ou rede indisponível.");
-        }
-      }
-    } catch (err) { console.error(err); } finally { setIsLoadingAuth(false); }
+    const cloudUser = await syncService.findUser(authEmail);
+    if (cloudUser && cloudUser.password === authPassword) {
+      const u = { id: cloudUser.id, name: cloudUser.name, email: cloudUser.email };
+      localStorage.setItem('neuro-session', JSON.stringify(u));
+      setCurrentUser(u);
+    } else { alert("Email ou senha incorretos."); }
+    setIsLoadingAuth(false);
   };
 
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!authEmail || !authPassword || !authName) return;
+  const handleRegister = async () => {
     setIsLoadingAuth(true);
     try {
-      // 1. Verifica se já existe na nuvem
       const existing = await syncService.findUser(authEmail);
       if (existing) {
-        alert("Este email já está em uso na rede sináptica.");
+        alert("Este email já está cadastrado.");
         setIsLoadingAuth(false);
         return;
       }
-      
-      const newUser = { id: crypto.randomUUID(), name: authName, email: authEmail, password: authPassword };
-      
-      // 2. Salva na nuvem (Sincronização global)
+      const id = crypto.randomUUID();
+      const newUser = { id, name: authName, email: authEmail, password: authPassword };
       const success = await syncService.saveUser(newUser);
-      if (!success) {
-        alert("Erro ao conectar com a nuvem. Tente novamente.");
-        setIsLoadingAuth(false);
-        return;
+      if (success) {
+        const u = { id: newUser.id, name: newUser.name, email: newUser.email };
+        localStorage.setItem('neuro-session', JSON.stringify(u));
+        setCurrentUser(u);
+      } else {
+        alert("Erro ao criar conta.");
       }
-
-      // 3. Salva local para compatibilidade
-      const users = JSON.parse(localStorage.getItem('neuro-users') || '[]');
-      users.push(newUser);
-      localStorage.setItem('neuro-users', JSON.stringify(users));
-      
-      const sessionUser = { id: newUser.id, name: newUser.name, email: newUser.email };
-      localStorage.setItem('neuro-session', JSON.stringify(sessionUser));
-      setCurrentUser(sessionUser);
-    } catch (err) { console.error(err); } finally { setIsLoadingAuth(false); }
-  };
-
-  const enterAsGuest = () => {
-    const guestUser = { id: 'guest-session', name: 'Explorador Neural', email: 'visitante@neuro.com' };
-    localStorage.setItem('neuro-session', JSON.stringify(guestUser));
-    setCurrentUser(guestUser);
-  };
-
-  const handleLogout = () => {
-    setCurrentUser(null);
-    localStorage.removeItem('neuro-session');
-    setTasks([]);
-    setHabits([]);
-    setPoints(0);
-  };
-
-  const calendarDays = useMemo(() => {
-    const days = [];
-    const today = new Date();
-    for (let i = -2; i < 12; i++) {
-      const date = new Date(today);
-      date.setDate(today.getDate() + i);
-      days.push({
-        full: date.toISOString().split('T')[0],
-        dayName: date.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', ''),
-        dayNum: date.getDate(),
-        isToday: date.toISOString().split('T')[0] === today.toISOString().split('T')[0]
-      });
+    } catch (e) {
+      alert("Erro ao conectar ao serviço de sincronização.");
+    } finally {
+      setIsLoadingAuth(false);
     }
-    return days;
-  }, []);
+  };
 
-  const dayTasks = useMemo(() => tasks.filter(t => t.date === selectedDate), [tasks, selectedDate]);
-  
-  const addTask = () => {
-    if (!newTaskText.trim()) return;
-    const task: Task = {
+  const addTask = (text: string, p: Priority = Priority.Q2, energy: Task['energy'] = captureEnergy) => {
+    if (!text.trim()) return;
+    const t: Task = {
       id: crypto.randomUUID(),
-      text: newTaskText,
-      priority: Priority.Q2,
-      energy: 'Média',
-      completed: false,
-      subtasks: [],
-      date: selectedDate,
-      createdAt: Date.now()
+      text, priority: p, energy, capacityNeeded: currentArousal,
+      completed: false, subtasks: [], date: selectedDate, createdAt: Date.now()
     };
-    setTasks(prev => [...prev, task]);
-    setNewTaskText("");
+    setTasks(prev => [...prev, t]);
   };
 
-  const toggleTask = async (id: string) => {
-    const task = tasks.find(t => t.id === id);
-    if (!task) return;
-    const isNowCompleted = !task.completed;
-    if (isNowCompleted) {
-      setJustCompletedId(id);
-      setTimeout(() => setJustCompletedId(null), 1200);
-      setPoints(prev => prev + 15);
-      setTasks(prev => prev.map(t => t.id === id ? { ...t, completed: true } : t));
-      if (selectedTask?.id === id) {
-        setSelectedTask(prev => prev ? { ...prev, completed: true } : null);
-      }
-      try {
-        const boostText = await geminiService.generateIdentityBoost(task.text);
-        setIdentityBoost({ text: boostText, taskTitle: task.text });
-        setTimeout(() => setIdentityBoost(null), 8000);
-      } catch (err) { console.error(err); }
-    } else {
-      setTasks(prev => prev.map(t => t.id === id ? { ...t, completed: false } : t));
-      if (selectedTask?.id === id) {
-        setSelectedTask(prev => prev ? { ...prev, completed: false } : null);
-      }
-      setPoints(prev => Math.max(0, prev - 15));
+  const handleAutoCategorize = async () => {
+    if (dayTasks.length === 0) return;
+    setIsOptimizing(true);
+    try {
+      const results = await geminiService.categorizeTasks(dayTasks);
+      setTasks(prev => prev.map(t => {
+        const suggestion = results.find(r => r.id === t.id);
+        if (suggestion) {
+          return { ...t, priority: suggestion.priority, energy: suggestion.energy };
+        }
+        return t;
+      }));
+    } catch (e) {
+      console.error("Erro na otimização:", e);
+    } finally {
+      setIsOptimizing(false);
     }
+  };
+
+  const handleAddHabit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!habitForm.text.trim()) return;
+    const h: Habit = {
+      id: crypto.randomUUID(),
+      text: habitForm.text,
+      anchor: habitForm.anchor || 'Momento âncora',
+      tinyAction: habitForm.tinyAction || 'Micro-ação',
+      streak: 0,
+      lastCompleted: null
+    };
+    setHabits(prev => [...prev, h]);
+    setHabitForm({ text: '', anchor: '', tinyAction: '' });
+    setShowHabitForm(false);
+  };
+
+  const handleAddRecurring = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!recurringForm.text.trim()) return;
+    const rt: RecurringTask = {
+      id: crypto.randomUUID(),
+      text: recurringForm.text,
+      frequency: recurringForm.frequency,
+      priority: Priority.Q2,
+      energy: recurringForm.energy,
+      completedDates: []
+    };
+    setRecurringTasks(prev => [...prev, rt]);
+    setRecurringForm({ text: '', frequency: Frequency.DAILY, energy: 'Baixa' });
+    setShowRecurringForm(false);
+  };
+
+  const toggleRecurringTask = (id: string) => {
+    const today = new Date().toISOString().split('T')[0];
+    setRecurringTasks(prev => prev.map(rt => {
+      if (rt.id === id) {
+        const alreadyDone = isRecurringDoneToday(rt);
+        if (!alreadyDone) {
+          setPoints(p => p + 15);
+          playAudio(SOUNDS.TASK_COMPLETE);
+          return { ...rt, completedDates: [...rt.completedDates, today] };
+        } else {
+          return { ...rt, completedDates: rt.completedDates.filter(d => d !== today) };
+        }
+      }
+      return rt;
+    }));
+  };
+
+  const isRecurringDoneToday = (rt: RecurringTask) => {
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    
+    if (rt.frequency === Frequency.DAILY) {
+      return rt.completedDates.includes(todayStr);
+    }
+    
+    // Para frequências maiores, verificamos se a última data de conclusão pertence ao período atual
+    const lastDateStr = rt.completedDates[rt.completedDates.length - 1];
+    if (!lastDateStr) return false;
+    
+    const lastDate = new Date(lastDateStr);
+    
+    if (rt.frequency === Frequency.WEEKLY) {
+      const diff = today.getTime() - lastDate.getTime();
+      const oneWeek = 7 * 24 * 60 * 60 * 1000;
+      return diff < oneWeek && getWeekNumber(today) === getWeekNumber(lastDate);
+    }
+    
+    if (rt.frequency === Frequency.MONTHLY) {
+      return today.getMonth() === lastDate.getMonth() && today.getFullYear() === lastDate.getFullYear();
+    }
+    
+    if (rt.frequency === Frequency.ANNUALLY) {
+      return today.getFullYear() === lastDate.getFullYear();
+    }
+    
+    return false;
+  };
+
+  const getWeekNumber = (d: Date) => {
+    const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
+    const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+    const weekNo = Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+    return weekNo;
+  };
+
+  const deleteHabit = (id: string) => {
+    if(confirm("Deseja remover este hábito?")) {
+      setHabits(prev => prev.filter(h => h.id !== id));
+    }
+  };
+
+  const deleteRecurring = (id: string) => {
+    if(confirm("Deseja remover esta rotina?")) {
+      setRecurringTasks(prev => prev.filter(rt => rt.id !== id));
+    }
+  };
+
+  const completeHabit = (id: string) => {
+    const today = new Date().toISOString().split('T')[0];
+    setHabits(prev => prev.map(h => {
+      if (h.id === id && h.lastCompleted !== today) {
+        setPoints(p => p + 50);
+        playAudio(SOUNDS.HABIT_COMPLETE);
+        return { ...h, streak: h.streak + 1, lastCompleted: today };
+      }
+      return h;
+    }));
+  };
+
+  const toggleTask = (id: string) => {
+    setTasks(prev => prev.map(t => {
+      if (t.id === id) {
+        if (!t.completed) {
+          setPoints(p => p + 25);
+          playAudio(SOUNDS.TASK_COMPLETE);
+        }
+        return { ...t, completed: !t.completed };
+      }
+      return t;
+    }));
+  };
+
+  const handleTaskDrop = (taskId: string, newPriority: Priority) => {
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, priority: newPriority } : t));
   };
 
   const handleDecompose = async (task: Task) => {
-    if (!task) return;
     setIsDecomposing(true);
     try {
       const steps = await geminiService.decomposeTask(task.text);
-      setTasks(prev => prev.map(t => t.id === task.id ? { ...t, subtasks: steps } : t));
-      if (selectedTask?.id === task.id) {
-        setSelectedTask(prev => prev ? { ...prev, subtasks: steps } : null);
-      }
-    } catch (err) {
-      console.error("Erro ao decompor tarefa:", err);
-    } finally {
-      setIsDecomposing(false);
+      setTasks(ts => ts.map(t => t.id === task.id ? { ...t, subtasks: steps } : t));
+    } finally { setIsDecomposing(false); }
+  };
+
+  const handleDopamenuAction = (label: string) => {
+    setPoints(p => p + 10);
+    playAudio(SOUNDS.XP_GAIN);
+    alert(`Recompensa "${label}" registrada! +10 XP.`);
+  };
+
+  const addDopamenuItem = (category: DopamenuItem['category']) => {
+    const label = prompt(`O que adicionar em ${category}?`);
+    const description = prompt(`Breve descrição da recompensa:`);
+    if (label && description) {
+      setDopamenuItems(prev => [...prev, { category, label, description }]);
     }
   };
 
-  const handleHabitCheck = (id: string) => {
-    setSparklingId(id);
-    setTimeout(() => setSparklingId(null), 1000);
-    setHabits(prev => prev.map(h => h.id === id ? { ...h, streak: h.streak + 1 } : h));
-    setPoints(p => p + 25);
-  };
-
-  const toggleRecurringCheck = (rec: RecurringTask) => {
-    const existingTask = tasks.find(t => t.text === rec.text && t.date === selectedDate);
-    if (existingTask) {
-      if (!existingTask.completed) {
-        setSparklingId(rec.id);
-        setTimeout(() => setSparklingId(null), 1000);
-      }
-      toggleTask(existingTask.id);
-    } else {
-      const newTask: Task = {
-        id: crypto.randomUUID(),
-        text: rec.text,
-        priority: rec.priority,
-        energy: rec.energy,
-        completed: true,
-        subtasks: [],
-        date: selectedDate,
-        createdAt: Date.now()
-      };
-      setSparklingId(rec.id);
-      setTimeout(() => setSparklingId(null), 1000);
-      setTasks(prev => [...prev, newTask]);
-      setPoints(prev => prev + 15);
+  const removeDopamenuItem = (label: string) => {
+    if (confirm(`Remover "${label}" do menu?`)) {
+      setDopamenuItems(prev => prev.filter(i => i.label !== label));
     }
   };
 
-  const dismissPlanOnboarding = () => {
-    setHasSeenPlanOnboarding(true);
-    localStorage.setItem('neuro-onboarding-plan', 'true');
-  };
-
-  const dismissHabitOnboarding = () => {
-    setHasSeenHabitOnboarding(true);
-    localStorage.setItem('neuro-onboarding-habit', 'true');
-  };
-
-  const completeTutorial = () => {
-    setShowTutorial(false);
-    if (currentUser) {
-      localStorage.setItem(`neuro-onboarding-v1-${currentUser.id}`, 'true');
-    }
-  };
+  // Memoized Filters
+  const dayTasks = useMemo(() => tasks.filter(t => t.date === selectedDate), [tasks, selectedDate]);
+  const filteredTasks = useMemo(() => {
+    return dayTasks.filter(t => {
+      if (currentArousal === 'Exausto') return t.energy === 'Baixa';
+      if (currentArousal === 'Hiperfocado') return true;
+      return t.energy !== 'Alta';
+    });
+  }, [dayTasks, currentArousal]);
 
   const isDark = theme === 'dark';
-  const neuroLevel = useMemo(() => {
-    if (points < 100) return { title: "Iniciante Neural", next: 100 };
-    if (points < 500) return { title: "Arquiteto de Hábitos", next: 500 };
-    if (points < 1500) return { title: "Mestre da Execução", next: 1500 };
-    return { title: "Ninja da Neuroplasticidade", next: Infinity };
-  }, [points]);
 
   const tutorialSteps = [
-    {
-      title: "Seu cérebro em modo Executor",
-      desc: "O NeuroExecutor foi desenhado sobre pilares da neuropsicologia para apoiar suas funções executivas: planejamento, foco e inibição de distrações.",
-      icon: <BrainCircuit size={48} className="text-orange-500" />,
-      theory: "A procrastinação não é preguiça, é uma falha na regulação emocional do sistema límbico sobre o córtex pré-frontal."
+    { title: "NeuroExecutor", description: "Sua prótese para o córtex pré-frontal. Gerencie energia e supere bloqueios.", icon: <SynapseLogo className="w-16 h-16" />, color: "text-orange-600" },
+    { title: "Foco (90 min)", description: "Ciclos ultradianos para máxima eficiência sem fadiga.", icon: <Timer size={48} />, color: "text-blue-500", target: "execute" },
+    { title: "Matriz Eisenhower", description: "Arraste e solte tarefas ou use o botão 'Focar' para priorizar seu fluxo.", icon: <LayoutGrid size={48} />, color: "text-purple-500", target: "plan" },
+    { title: "Otimização IA", description: "Deixe nossa IA categorizar sua energia e prioridades automaticamente.", icon: <Brain size={48} />, color: "text-blue-400" },
+    { title: "Dieta de Dopamina", description: "Recompensas saudáveis para manter o motor mental girando.", icon: <Coffee size={48} />, color: "text-orange-500", target: "dopamenu" },
+    { title: "Andaimação Neural", description: "Construa hábitos sólidos usando âncoras e micro-ações.", icon: <RefreshCw size={48} />, color: "text-green-500", target: "habits" },
+    { title: "Resgate Neural com IA", description: "Se travar, nosso protocolo de IA ajuda a desmembrar a tarefa.", icon: <AlertTriangle size={48} />, color: "text-red-500" }
+  ];
+
+  const planTutorialSteps = [
+    { 
+      title: "Dominando a Matriz", 
+      description: "Esta é a Matriz de Eisenhower. Ela separa o que é importante do que é apenas urgente, reduzindo o estresse de decisão do seu cérebro.",
+      icon: <LayoutGrid size={40} className="text-purple-500" />
     },
-    {
-      title: "Ciclos Ultradianos",
-      desc: "O cérebro funciona em ondas de 90 minutos de alta atividade. Use o timer de Foco para respeitar sua biologia e evitar o burnout cognitivo.",
-      icon: <Timer size={48} className="text-orange-500" />,
-      theory: "Trabalhar em blocos de 90 min otimiza a ressíntese de neurotransmissores como acetilcolina e dopamina."
+    { 
+      title: "Arraste e Solte", 
+      description: "Sua mente muda, e sua prioridade também. Arraste qualquer tarefa entre os quadrantes para redefinir sua estratégia visualmente.",
+      icon: <Move size={40} className="text-blue-500" />
     },
-    {
-      title: "Quebrando a Fricção",
-      desc: "Tarefas grandes geram medo. Nossa IA 'Decompor' transforma blocos pesados em micro-ações que seu cérebro não consegue rejeitar.",
-      icon: <Sparkles size={48} className="text-orange-500" />,
-      theory: "Micro-passos reduzem a amígdala (centro do medo) e ativam o sistema de busca estriatal."
+    { 
+      title: "Mira no Alvo", 
+      description: "Viu o botão de alvo? Ao clicar nele, você define essa tarefa como o foco imediato. Menos hesitação, mais execução.",
+      icon: <Target size={40} className="text-orange-500" />
     },
-    {
-      title: "Protocolo de Resgate",
-      desc: "Travou? Use o Resgate Neural. A IA analisará seu obstáculo e fornecerá um protocolo imediato para sair da paralisia executiva.",
-      icon: <AlertTriangle size={48} className="text-orange-600" />,
-      theory: "O resgate externo atua como um 'andaimaria' (scaffolding) cognitivo para quando seus recursos internos estão baixos."
-    },
-    {
-      title: "Fortalecendo Sinapses",
-      desc: "Cada check gera XP. Os 'Identity Boosts' reforçam que você é alguém produtivo, mudando sua autoimagem a longo prazo.",
-      icon: <Award size={48} className="text-orange-500" />,
-      theory: "A neuroplasticidade ocorre através da repetição e recompensa. Celebrar vitórias fixa o novo comportamento."
+    { 
+      title: "Energia Neural", 
+      description: "Toda tarefa consome glicose. Categorize-as por energia para saber o que fazer quando estiver exausto ou no pico de foco.",
+      icon: <Zap size={40} className="text-yellow-500" />
     }
   ];
 
-  if (!currentUser) {
-    return (
-      <div className={`min-h-screen flex items-center justify-center p-6 transition-colors duration-500 ${isDark ? 'bg-[#020617]' : 'bg-slate-50'}`}>
-        <div className={`w-full max-w-md p-10 rounded-[48px] border shadow-2xl animate-in zoom-in-95 duration-700 ${isDark ? 'bg-[#0a1128]/80 border-slate-800' : 'bg-white border-slate-200'}`}>
-          <div className="flex flex-col items-center mb-10 text-center">
-            <SynapseLogo className="w-16 h-16 mb-6" />
-            <h1 className={`text-4xl font-black italic tracking-tighter ${isDark ? 'text-orange-500' : 'text-orange-600'}`}>NEUROEXECUTOR</h1>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-2">Neurociência aplicada à execução</p>
-          </div>
-          <form onSubmit={isRegistering ? handleRegister : handleLogin} className="space-y-4">
-            {isRegistering && (
-              <div className="relative group">
-                <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-orange-500 transition-colors" size={20} />
-                <input required className={`w-full py-4 pl-12 pr-4 rounded-2xl border outline-none transition-all ${isDark ? 'bg-[#020617] border-slate-800 focus:border-orange-500' : 'bg-slate-50 border-slate-200 focus:border-orange-500'}`} placeholder="Nome Completo" value={authName} onChange={e => setAuthName(e.target.value)} />
-              </div>
-            )}
-            <div className="relative group">
-              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-orange-500 transition-colors" size={20} />
-              <input required type="email" className={`w-full py-4 pl-12 pr-4 rounded-2xl border outline-none transition-all ${isDark ? 'bg-[#020617] border-slate-800 focus:border-orange-500' : 'bg-slate-50 border-slate-200 focus:border-orange-500'}`} placeholder="Email" value={authEmail} onChange={e => setAuthEmail(e.target.value)} />
-            </div>
-            <div className="relative group">
-              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-orange-500 transition-colors" size={20} />
-              <input required type="password" className={`w-full py-4 pl-12 pr-4 rounded-2xl border outline-none transition-all ${isDark ? 'bg-[#020617] border-slate-800 focus:border-orange-500' : 'bg-slate-50 border-slate-200 focus:border-orange-500'}`} placeholder="Senha" value={authPassword} onChange={e => setAuthPassword(e.target.value)} />
-            </div>
-            <button type="submit" disabled={isLoadingAuth} className={`w-full py-4 bg-orange-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-orange-900/40 flex items-center justify-center gap-3 hover:bg-orange-500 transition-all active:scale-[0.98] ${isLoadingAuth ? 'opacity-70 cursor-not-allowed' : ''}`}>
-              {isLoadingAuth ? "Carregando..." : (isRegistering ? "Ativar Neurônios" : "Entrar no Fluxo")}
-              {!isLoadingAuth && <ArrowRight size={20} />}
-            </button>
-          </form>
-          <div className="mt-8 space-y-3">
-            <button onClick={() => setIsRegistering(!isRegistering)} className="w-full text-center text-xs font-bold text-slate-500 hover:text-orange-500 transition-colors uppercase tracking-wider">
-              {isRegistering ? "Já tenho uma conta neural" : "Criar nova rede executiva"}
-            </button>
-            <div className={`h-px w-full ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`} />
-            <button onClick={enterAsGuest} className="w-full py-3 text-center text-xs font-black text-slate-500 hover:text-orange-500 transition-colors uppercase tracking-widest flex items-center justify-center gap-2">
-              <UserCheck size={16} /> Explorar como Visitante
-            </button>
-          </div>
+  const handleTutorialNext = () => {
+    if (tutorialStep < tutorialSteps.length - 1) {
+      setTutorialStep(prev => prev + 1);
+      const target = tutorialSteps[tutorialStep + 1].target;
+      if (target) setActiveTab(target as any);
+    } else {
+      setShowTutorial(false);
+      if (currentUser) localStorage.setItem(`neuro-tutorial-${currentUser.id}`, 'true');
+    }
+  };
+
+  const handlePlanTutorialNext = () => {
+    if (planTutorialStep < planTutorialSteps.length - 1) {
+      setPlanTutorialStep(prev => prev + 1);
+    } else {
+      setShowPlanTutorial(false);
+      if (currentUser) localStorage.setItem(`neuro-plan-tutorial-${currentUser.id}`, 'true');
+    }
+  };
+
+  if (!currentUser) return (
+    <div className={`min-h-screen flex items-center justify-center p-6 ${isDark ? 'bg-[#020617]' : 'bg-slate-50'}`}>
+      <div className={`w-full max-w-md p-10 rounded-[48px] border shadow-2xl ${isDark ? 'bg-[#0a1128] border-slate-800' : 'bg-white border-slate-200'}`}>
+        <div className="flex flex-col items-center mb-10">
+          <SynapseLogo className="w-16 h-16 mb-4" />
+          <h1 className="text-3xl font-black italic tracking-tighter text-orange-600 uppercase">NeuroExecutor</h1>
         </div>
+        <form onSubmit={isRegistering ? (e) => { e.preventDefault(); handleRegister(); } : handleLogin} className="space-y-4">
+          {isRegistering && <input required className="w-full py-4 px-6 rounded-2xl border bg-transparent" placeholder="Seu Nome" value={authName} onChange={e => setAuthName(e.target.value)} />}
+          <input required type="email" className="w-full py-4 px-6 rounded-2xl border bg-transparent" placeholder="Email" value={authEmail} onChange={e => setAuthEmail(e.target.value)} />
+          <input required type="password" className="w-full py-4 px-6 rounded-2xl border bg-transparent" placeholder="Senha" value={authPassword} onChange={e => setAuthPassword(e.target.value)} />
+          <button type="submit" className="w-full py-4 bg-orange-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-orange-500 transition-all shadow-glow-orange">
+            {isLoadingAuth ? "Processando..." : (isRegistering ? "Criar Minha Rede" : "Entrar no Fluxo")}
+          </button>
+        </form>
+        <button onClick={() => setIsRegistering(!isRegistering)} className="w-full mt-6 text-xs font-bold text-slate-500 uppercase">
+          {isRegistering ? "Já sou membro" : "Não tenho conta ainda"}
+        </button>
+        <button onClick={() => setCurrentUser({ id: 'guest', name: 'Visitante', email: 'guest@neuro.com' })} className="w-full mt-2 text-xs font-bold text-slate-500 uppercase underline opacity-60">Entrar como Visitante</button>
       </div>
-    );
-  }
+    </div>
+  );
 
   return (
     <div className={`min-h-screen flex flex-col md:flex-row transition-colors duration-500 ${isDark ? 'bg-[#020617] text-white' : 'bg-slate-50 text-slate-900'}`}>
-      <nav className={`fixed bottom-0 w-full transition-colors duration-500 backdrop-blur-xl border-t md:static md:w-72 md:h-screen md:border-t-0 md:border-r z-50 flex md:flex-col ${isDark ? 'bg-[#0a1128]/95 border-slate-800' : 'bg-white/95 border-slate-200'}`}>
-        <div className="hidden md:flex items-center justify-between p-8">
-          <div>
-            <h1 className={`text-2xl font-black flex items-center gap-3 italic tracking-tight ${isDark ? 'text-orange-500' : 'text-orange-600'}`}>
-              <SynapseLogo /> EXECUTE
-            </h1>
-            
-            <div className="mt-6 flex items-center gap-3 group relative">
-              <div className="w-10 h-10 rounded-xl bg-orange-600/20 text-orange-500 flex items-center justify-center font-black">
-                {currentUser.name[0].toUpperCase()}
-              </div>
-              <div className="flex-1 overflow-hidden">
-                <p className="text-xs font-black truncate">{currentUser.name}</p>
-                <div className="flex items-center gap-1.5">
-                   {syncStatus === 'synced' && <CloudCheck size={10} className="text-green-500" />}
-                   {syncStatus === 'syncing' && <Cloud size={10} className="text-orange-500 animate-pulse" />}
-                   {syncStatus === 'error' && <CloudOff size={10} className="text-red-500" />}
-                   <p className="text-[9px] text-slate-500 font-bold uppercase truncate">{syncStatus === 'synced' ? 'Sincronizado' : syncStatus === 'syncing' ? 'Sincronizando' : 'Offline'}</p>
-                </div>
-              </div>
+      {/* Sidebar */}
+      <nav className={`fixed bottom-0 w-full backdrop-blur-xl border-t md:static md:w-72 md:h-screen md:border-r z-50 flex md:flex-col ${isDark ? 'bg-[#0a1128]/95 border-slate-800' : 'bg-white/95 border-slate-200'}`}>
+        <div className="hidden md:flex flex-col p-8 space-y-8">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3"><SynapseLogo /><h1 className="text-xl font-black italic text-orange-600">EXECUTE</h1></div>
+            <button onClick={() => setSoundEnabled(!soundEnabled)} className="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white transition-colors">
+              {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+            </button>
+          </div>
+          
+          <div className="space-y-3">
+            <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Capacidade Neural</p>
+            <div className="flex gap-2">
+              <button onClick={() => setCurrentArousal('Exausto')} className={`flex-1 p-3 rounded-2xl border flex flex-col items-center gap-1 transition-all ${currentArousal === 'Exausto' ? 'bg-blue-600/20 border-blue-500 text-blue-400' : 'border-slate-800 opacity-40'}`}>
+                <BatteryLow size={16}/><span className="text-[8px] font-black">EXAUSTO</span>
+              </button>
+              <button onClick={() => setCurrentArousal('Neutro')} className={`flex-1 p-3 rounded-2xl border flex flex-col items-center gap-1 transition-all ${currentArousal === 'Neutro' ? 'bg-orange-600/20 border-orange-500 text-orange-400' : 'border-slate-800 opacity-40'}`}>
+                <BatteryMedium size={16}/><span className="text-[8px] font-black">NEUTRO</span>
+              </button>
+              <button onClick={() => setCurrentArousal('Hiperfocado')} className={`flex-1 p-3 rounded-2xl border flex flex-col items-center gap-1 transition-all ${currentArousal === 'Hiperfocado' ? 'bg-purple-600/20 border-purple-500 text-purple-400' : 'border-slate-800 opacity-40'}`}>
+                <BatteryFull size={16}/><span className="text-[8px] font-black">PICO</span>
+              </button>
             </div>
+          </div>
+
+          <div className="p-6 rounded-3xl bg-slate-900/40 border border-slate-800 flex items-center justify-between">
+             <div><p className="text-[10px] font-black text-slate-500">XP</p><p className="text-2xl font-black text-orange-500">{points}</p></div>
+             <Trophy className="text-orange-500 opacity-40" />
           </div>
         </div>
 
         <div className="flex flex-1 justify-around p-2 md:flex-col md:gap-2 md:px-4 md:justify-start">
-          <NavButton isDark={isDark} icon={<Timer size={22}/>} label="Focar" active={activeTab === 'execute'} onClick={() => setActiveTab('execute')} />
-          <NavButton isDark={isDark} icon={<LayoutGrid size={22}/>} label="Planejar" active={activeTab === 'plan'} onClick={() => setActiveTab('plan')} />
-          <NavButton isDark={isDark} icon={<RefreshCw size={22}/>} label="Rotinas" active={activeTab === 'habits'} onClick={() => setActiveTab('habits')} />
-          <NavButton isDark={isDark} icon={<ListTodo size={22}/>} label="Captura" active={activeTab === 'capture'} onClick={() => setActiveTab('capture')} />
+          <NavButton icon={<Timer />} label="Focar" active={activeTab === 'execute'} onClick={() => setActiveTab('execute')} />
+          <NavButton icon={<LayoutGrid />} label="Matriz" active={activeTab === 'plan'} onClick={() => setActiveTab('plan')} />
+          <NavButton icon={<RefreshCw />} label="Hábitos" active={activeTab === 'habits'} onClick={() => setActiveTab('habits')} />
+          <NavButton icon={<Coffee />} label="Dopamenu" active={activeTab === 'dopamenu'} onClick={() => setActiveTab('dopamenu')} />
+          <NavButton icon={<ListTodo />} label="Captura" active={activeTab === 'capture'} onClick={() => setActiveTab('capture')} />
         </div>
 
-        <div className="hidden md:flex flex-col gap-2 p-4 border-t border-slate-800/50 mt-auto">
-          <button onClick={() => setTheme(isDark ? 'light' : 'dark')} className={`flex items-center gap-4 px-6 py-4 rounded-2xl font-bold text-xs transition-all ${isDark ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-500 hover:bg-slate-100'}`}>
-            {isDark ? <Sun size={18}/> : <Moon size={18}/>}
-            {isDark ? "Modo Claro" : "Modo Escuro"}
-          </button>
-          <button onClick={handleLogout} className="flex items-center gap-4 px-6 py-4 rounded-2xl font-bold text-xs text-red-500 hover:bg-red-500/10 transition-all">
-            <LogOut size={18}/> Encerrar Sessão
-          </button>
+        <div className="hidden md:flex flex-col gap-2 p-4 mt-auto border-t border-slate-800/50">
+           <div className="px-4 py-2 flex items-center justify-between text-[10px] font-black text-slate-500 uppercase">
+              {syncStatus === 'synced' ? <span className="flex items-center gap-1 text-green-500"><CloudCheck size={14}/> Nuvem</span> : <span className="flex items-center gap-1 text-orange-500"><RefreshCw size={14} className="animate-spin"/> Sync</span>}
+           </div>
+          <button onClick={() => { localStorage.removeItem('neuro-session'); setCurrentUser(null); }} className="flex items-center gap-4 px-6 py-4 rounded-2xl font-bold text-xs text-red-500 hover:bg-red-500/10"> <LogOut size={18}/> Sair </button>
         </div>
       </nav>
 
-      <main className="flex-1 overflow-y-auto pb-24 md:pb-8">
-        <div className="max-w-5xl mx-auto p-4 md:p-10 space-y-8">
-          <div className={`${isDark ? 'bg-[#0a1128]/50 border-slate-800/50' : 'bg-white border-slate-200 shadow-sm'} border rounded-[32px] p-4 overflow-x-auto`}>
-            <div className="flex gap-3 min-w-max px-2">
-              {calendarDays.map((day) => (
-                <button key={day.full} onClick={() => setSelectedDate(day.full)} className={`flex flex-col items-center justify-center w-14 h-20 rounded-2xl transition-all ${selectedDate === day.full ? (isDark ? 'bg-orange-600 text-white animate-glow-orange scale-110 z-10' : 'bg-orange-600 text-white shadow-lg scale-110 z-10') : (isDark ? 'bg-slate-900/50 text-slate-500 hover:bg-slate-800' : 'bg-slate-50 text-slate-400 hover:bg-slate-100')}`}>
-                  <span className="text-[10px] font-black uppercase tracking-tighter mb-1">{day.dayName}</span>
-                  <span className="text-xl font-black">{day.dayNum}</span>
-                  {day.isToday && <div className={`w-1 h-1 rounded-full mt-1 ${selectedDate === day.full ? 'bg-white' : 'bg-orange-500'}`} />}
-                </button>
-              ))}
-            </div>
-          </div>
-
+      {/* Main Content */}
+      <main className="flex-1 overflow-y-auto pb-24 md:pb-8 p-4 md:p-10">
+        <div className="max-w-5xl mx-auto space-y-10">
+          
           {activeTab === 'execute' && (
-            <div className="space-y-8 animate-in fade-in duration-500">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 space-y-6">
-                  <div className={`border rounded-[40px] p-10 text-center shadow-2xl relative overflow-hidden ${isDark ? 'bg-[#0a1128] border-slate-800' : 'bg-white border-slate-200'}`}>
-                    <div className="absolute top-0 left-0 w-full h-1 bg-slate-800">
-                      <div className="h-full bg-orange-500 transition-all duration-1000" style={{ width: `${(timeLeft / (90*60)) * 100}%` }}></div>
-                    </div>
-                    <span className="text-[10px] font-black uppercase tracking-[0.3em] mb-4 block text-slate-500">Ciclo Ultradiano</span>
-                    <div className="text-[100px] leading-none font-black font-mono tracking-tighter tabular-nums mb-10">{formatTime(timeLeft)}</div>
-                    <div className="flex justify-center gap-6">
-                      <button onClick={() => setIsTimerActive(!isTimerActive)} className={`w-16 h-16 rounded-3xl flex items-center justify-center transition-all ${isTimerActive ? 'bg-slate-800 text-slate-400' : 'bg-orange-600 text-white shadow-xl animate-glow-orange'}`}>
-                        {isTimerActive ? <Pause size={28} /> : <Play size={28} fill="currentColor" />}
-                      </button>
-                      <button onClick={() => { setIsTimerActive(false); setTimeLeft(90*60); }} className="w-16 h-16 rounded-3xl flex items-center justify-center bg-slate-800 text-slate-500"><RotateCcw size={24} /></button>
-                    </div>
-                  </div>
-
-                  <div className={`border rounded-[40px] p-8 min-h-[300px] relative overflow-hidden transition-all duration-500 ${isDark ? 'bg-[#0a1128] border-slate-800' : 'bg-white border-slate-200 shadow-lg'} ${selectedTask && justCompletedId === selectedTask.id ? 'animate-glow-success animate-border-success' : ''}`}>
-                    {selectedTask && justCompletedId === selectedTask.id && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-green-500/5 pointer-events-none z-10">
-                        <CheckCircle2 size={80} className="text-green-500 animate-check-pop" />
-                      </div>
-                    )}
-                    {selectedTask ? (
-                      <div className="space-y-6">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h2 className={`text-3xl font-black transition-all ${justCompletedId === selectedTask.id ? 'animate-text-success' : ''}`}>
-                              {selectedTask.text}
-                            </h2>
-                            <span className="inline-block mt-2 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-orange-600/20 text-orange-400 animate-pulse-orange">
-                              {selectedTask.priority}
-                            </span>
-                          </div>
-                          <button onClick={() => setPanicTask(selectedTask)} className="p-3 bg-orange-600/10 text-orange-600 rounded-2xl hover:bg-orange-600 hover:text-white transition-all"> <AlertTriangle size={24} /> </button>
-                        </div>
-                        <div className="space-y-4">
-                          {selectedTask.subtasks.length > 0 ? selectedTask.subtasks.map((step, i) => (
-                            <div key={i} className={`flex items-center gap-4 p-5 rounded-3xl border transition-all ${isDark ? 'bg-slate-800/20 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
-                              <div className="w-8 h-8 rounded-full border border-orange-500/30 flex items-center justify-center font-black text-xs text-orange-400">{i + 1}</div>
-                              <p className="text-sm font-medium">{step}</p>
-                            </div>
-                          )) : (
-                            <button onClick={() => handleDecompose(selectedTask)} disabled={isDecomposing} className="w-full py-16 border-2 border-dashed border-slate-800 rounded-[40px] text-slate-500 hover:text-orange-400 hover:border-orange-500/40 transition-all flex flex-col items-center gap-4">
-                              {isDecomposing ? <BrainCircuit className="animate-spin" size={40}/> : <><Sparkles size={40}/><span className="font-bold">Decompor com IA</span></>}
-                            </button>
-                          )}
-                        </div>
-                        <button onClick={() => toggleTask(selectedTask.id)} disabled={selectedTask.completed || justCompletedId === selectedTask.id} className={`w-full py-4 rounded-2xl font-black uppercase tracking-widest transition-all shadow-xl active:scale-[0.98] ${selectedTask.completed || justCompletedId === selectedTask.id ? 'bg-green-600 text-white' : 'bg-orange-600 hover:bg-orange-500 text-white'}`}>
-                          {justCompletedId === selectedTask.id ? 'Neuro-vitoria!' : 'Finalizar Execução'}
-                        </button>
-                      </div>
-                    ) : <div className="py-24 text-center opacity-30 text-slate-400"><Anchor size={60} className="mx-auto mb-4"/><p>Selecione uma tarefa</p></div>}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-700">
+              <div className="lg:col-span-2 space-y-8">
+                {/* Timer Section */}
+                <div className="p-12 text-center border rounded-[48px] bg-slate-900/60 border-slate-800 relative overflow-hidden shadow-2xl">
+                  {isBodyDoubling && <div className="absolute inset-0 bg-orange-600/5 animate-pulse pointer-events-none" />}
+                  <span className="text-[10px] font-black text-slate-500 tracking-[0.3em] uppercase mb-4 block">Fluxo Ultradiano</span>
+                  <h2 className="text-[100px] leading-none font-mono font-black tracking-tighter tabular-nums mb-8">{formatTime(timeLeft)}</h2>
+                  <div className="flex justify-center gap-6">
+                    <button onClick={toggleTimer} className="w-20 h-20 bg-orange-600 rounded-[32px] text-white shadow-glow-orange flex items-center justify-center hover:bg-orange-500 transition-all">
+                      {isTimerActive ? <Pause size={32}/> : <Play size={32} fill="currentColor"/>}
+                    </button>
+                    <button onClick={() => setTimeLeft(90*60)} className="w-20 h-20 bg-slate-800 rounded-[32px] text-slate-400 flex items-center justify-center"> <RotateCcw size={32}/> </button>
                   </div>
                 </div>
 
-                <div className="space-y-6">
-                  <div className={`border rounded-[32px] p-6 ${isDark ? 'bg-[#0a1128] border-slate-800' : 'bg-white border-slate-200'}`}>
-                    <h3 className="text-xs font-black uppercase text-slate-500 mb-4">Tarefas do Dia</h3>
-                    <div className="space-y-2">
-                      {dayTasks.filter(t => !t.completed).map(t => (
-                        <button key={t.id} onClick={() => setSelectedTask(t)} className={`w-full text-left p-4 rounded-2xl border transition-all relative overflow-hidden ${selectedTask?.id === t.id ? 'bg-orange-600/10 border-orange-500 text-white' : 'border-slate-800 text-slate-500'}`}>
-                          <span className={`text-xs font-bold truncate ${justCompletedId === t.id ? 'animate-text-success' : ''}`}>{t.text}</span>
+                {/* Active Task Card */}
+                <div className="p-10 border rounded-[48px] bg-slate-900/60 border-slate-800 min-h-[350px] shadow-xl">
+                  {selectedTask ? (
+                    <div className="space-y-8">
+                      <div className="flex justify-between items-start">
+                        <div className="space-y-2">
+                           <h2 className={`text-4xl font-black ${selectedTask.completed ? 'line-through opacity-20' : ''}`}>{selectedTask.text}</h2>
+                           <div className="flex gap-2">
+                              <span className="px-3 py-1 bg-orange-600/20 text-orange-500 rounded-full text-[8px] font-black uppercase">{selectedTask.priority}</span>
+                              <EnergyBadge energy={selectedTask.energy} />
+                           </div>
+                        </div>
+                        <button onClick={() => setPanicTask(selectedTask)} className="p-5 bg-red-600/10 text-red-500 rounded-[28px] hover:bg-red-600 hover:text-white transition-all"> <AlertTriangle size={28}/> </button>
+                      </div>
+                      
+                      <div className="space-y-4">
+                        {selectedTask.subtasks.map((s, i) => (
+                          <div key={i} className="p-5 bg-slate-800/30 rounded-3xl flex items-center gap-5 border border-slate-700/50 group">
+                            <span className="text-[10px] font-black text-orange-500 w-6 h-6 flex items-center justify-center bg-orange-500/10 rounded-full">{i+1}</span>
+                            <p className="text-sm font-medium opacity-80">{s}</p>
+                          </div>
+                        ))}
+                        {selectedTask.subtasks.length === 0 && (
+                          <button onClick={() => handleDecompose(selectedTask)} className="w-full py-16 border-2 border-dashed border-slate-800 rounded-[32px] flex flex-col items-center gap-3 opacity-40 hover:opacity-100 transition-all group">
+                            {isDecomposing ? <RefreshCw className="animate-spin text-orange-500" /> : <Sparkles />}
+                            <span className="text-[10px] font-black uppercase">Desmembrar com IA (Chunking)</span>
+                          </button>
+                        )}
+                      </div>
+                      <button onClick={() => toggleTask(selectedTask.id)} className={`w-full py-6 rounded-3xl font-black uppercase tracking-[0.2em] shadow-2xl transition-all active:scale-95 ${selectedTask.completed ? 'bg-green-600' : 'bg-orange-600'} text-white`}>
+                        {selectedTask.completed ? "Reativar" : "Concluir Missão (+25 XP)"}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="py-24 text-center opacity-10 flex flex-col items-center gap-4">
+                       <Target size={80}/>
+                       <p className="text-xl font-black uppercase">Defina seu alvo</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Today's Sidebar */}
+              <div className="space-y-6">
+                <div className="p-8 border rounded-[40px] bg-slate-900/60 border-slate-800 shadow-lg">
+                   <h3 className="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-6">Execução Pendente</h3>
+                   <div className="space-y-3">
+                      {filteredTasks.filter(t => !t.completed).map(t => (
+                        <button key={t.id} onClick={() => setSelectedTask(t)} className={`w-full p-5 text-left border rounded-[24px] transition-all group ${selectedTask?.id === t.id ? 'bg-orange-600/10 border-orange-500 ring-1 ring-orange-500' : 'border-slate-800 bg-slate-800/20 hover:bg-slate-800/40'}`}>
+                           <p className="text-sm font-bold truncate group-hover:translate-x-1 transition-transform">{t.text}</p>
                         </button>
                       ))}
-                      {dayTasks.filter(t => !t.completed).length === 0 && (
-                        <p className="text-xs text-slate-500 text-center italic py-4">Sem tarefas pendentes.</p>
+                      {filteredTasks.filter(t => !t.completed).length === 0 && (
+                        <div className="py-12 text-center italic text-slate-700 text-xs">Sem tarefas críticas.</div>
                       )}
-                    </div>
-                  </div>
+                   </div>
                 </div>
               </div>
             </div>
           )}
 
           {activeTab === 'plan' && (
-            <div className="space-y-8 animate-in slide-in-from-bottom duration-500 relative">
-               {!hasSeenPlanOnboarding && (
-                 <div className="absolute inset-0 z-[60] flex items-center justify-center p-4">
-                   <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm rounded-[40px]" />
-                   <div className={`relative w-full max-w-lg p-10 border rounded-[48px] shadow-2xl animate-in zoom-in-95 duration-500 ${isDark ? 'bg-[#0a1128] border-orange-500/40' : 'bg-white border-orange-200'}`}>
-                     <div className="flex items-center gap-4 mb-6">
-                       <div className="w-12 h-12 rounded-2xl bg-orange-600/20 text-orange-500 flex items-center justify-center">
-                         <Info size={28} />
-                       </div>
-                       <h3 className="text-2xl font-black italic tracking-tight">Otimize sua Estratégia</h3>
-                     </div>
-                     <div className="space-y-5 text-sm font-medium opacity-90 leading-relaxed">
-                       <div className="flex gap-4">
-                         <LayoutGrid className="text-orange-500 shrink-0" size={20} />
-                         <p><span className="font-bold text-orange-500">Matriz de Eisenhower:</span> Organize suas tarefas por Urgência e Importância para priorizar o que realmente importa para o seu cérebro.</p>
-                       </div>
-                       <div className="flex gap-4">
-                         <MousePointer2 className="text-orange-500 shrink-0" size={20} />
-                         <p><span className="font-bold text-orange-500">Drag & Drop:</span> Arraste as tarefas entre os quadrantes para redefinir prioridades instantaneamente.</p>
-                       </div>
-                       <div className="flex gap-4">
-                         <Play className="text-orange-500 shrink-0" size={20} />
-                         <p>Clique no botão <span className="bg-orange-600 p-1 rounded text-white inline-flex"><Play size={10} fill="currentColor"/></span> para levar qualquer tarefa diretamente para a aba de <span className="font-black italic">Foco</span>.</p>
-                       </div>
-                     </div>
-                     <button onClick={dismissPlanOnboarding} className="mt-10 w-full py-4 bg-orange-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-orange-900/40 hover:bg-orange-500 transition-all active:scale-[0.98]">
-                       Entendido!
-                     </button>
-                   </div>
-                 </div>
-               )}
+            <div className="space-y-6 relative">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center px-4 gap-4">
+                <div className="flex items-center gap-4">
+                  <h2 className="text-2xl font-black italic uppercase">Matriz de Eisenhower</h2>
+                  <button onClick={() => { setPlanTutorialStep(0); setShowPlanTutorial(true); }} className="p-2 text-slate-600 hover:text-orange-500 transition-colors" title="Ajuda">
+                    <HelpCircle size={20} />
+                  </button>
+                </div>
+                <button 
+                  onClick={handleAutoCategorize}
+                  disabled={isOptimizing || dayTasks.length === 0}
+                  className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-full text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all shadow-xl disabled:opacity-50 w-full sm:w-auto"
+                >
+                  {isOptimizing ? <RefreshCw size={14} className="animate-spin"/> : <Brain size={14}/>}
+                  Otimização Neural (IA)
+                </button>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in slide-in-from-bottom duration-700">
+                <MatrixQuadrant priority={Priority.Q1} title="Q1: Crítico e Urgente" color="bg-red-600/5 border-red-500/20" tasks={dayTasks.filter(t => t.priority === Priority.Q1 && !t.completed)} onSelect={(t) => { setSelectedTask(t); setActiveTab('execute'); }} onDrop={handleTaskDrop} />
+                <MatrixQuadrant priority={Priority.Q2} title="Q2: Estratégico/Importante" color="bg-orange-600/5 border-orange-500/20" tasks={dayTasks.filter(t => t.priority === Priority.Q2 && !t.completed)} onSelect={(t) => { setSelectedTask(t); setActiveTab('execute'); }} onDrop={handleTaskDrop} />
+                <MatrixQuadrant priority={Priority.Q3} title="Q3: Delegar/Reduzir" color="bg-blue-600/5 border-blue-500/20" tasks={dayTasks.filter(t => t.priority === Priority.Q3 && !t.completed)} onSelect={(t) => { setSelectedTask(t); setActiveTab('execute'); }} onDrop={handleTaskDrop} />
+                <MatrixQuadrant priority={Priority.Q4} title="Q4: Eliminar Distrações" color="bg-slate-800/20 border-slate-700/50" tasks={dayTasks.filter(t => t.priority === Priority.Q4 && !t.completed)} onSelect={(t) => { setSelectedTask(t); setActiveTab('execute'); }} onDrop={handleTaskDrop} />
+              </div>
 
-               <div className="flex items-center justify-between">
-                 <h2 className="text-3xl font-black italic">Matriz de Decisão</h2>
-                 <button onClick={() => setHasSeenPlanOnboarding(false)} className="text-slate-500 hover:text-orange-500 transition-colors">
-                   <Info size={20} />
-                 </button>
-               </div>
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 <MatrixQuadrant isDark={isDark} priority={Priority.Q1} title="Q1: Fazer Agora" desc="Urgente" tasks={dayTasks.filter(t => t.priority === Priority.Q1 && !t.completed)} onSelect={setSelectedTask} onTabChange={() => setActiveTab('execute')} onMoveTask={(tid, p) => setTasks(ts => ts.map(t => t.id === tid ? {...t, priority: p} : t))} />
-                 <MatrixQuadrant isDark={isDark} priority={Priority.Q2} title="Q2: Estratégico" desc="Importante" tasks={dayTasks.filter(t => t.priority === Priority.Q2 && !t.completed)} onSelect={setSelectedTask} onTabChange={() => setActiveTab('execute')} onMoveTask={(tid, p) => setTasks(ts => ts.map(t => t.id === tid ? {...t, priority: p} : t))} />
-                 <MatrixQuadrant isDark={isDark} priority={Priority.Q3} title="Q3: Delegar" desc="Interrupções" tasks={dayTasks.filter(t => t.priority === Priority.Q3 && !t.completed)} onSelect={setSelectedTask} onTabChange={() => setActiveTab('execute')} onMoveTask={(tid, p) => setTasks(ts => ts.map(t => t.id === tid ? {...t, priority: p} : t))} />
-                 <MatrixQuadrant isDark={isDark} priority={Priority.Q4} title="Q4: Eliminar" desc="Trivial" tasks={dayTasks.filter(t => t.priority === Priority.Q4 && !t.completed)} onSelect={setSelectedTask} onTabChange={() => setActiveTab('execute')} onMoveTask={(tid, p) => setTasks(ts => ts.map(t => t.id === tid ? {...t, priority: p} : t))} />
-               </div>
+              {/* Plan Tutorial Overlay */}
+              {showPlanTutorial && (
+                <div className="fixed inset-0 z-[1001] flex items-center justify-center p-6 bg-[#020617]/40 backdrop-blur-sm animate-in fade-in duration-300">
+                  <div className="w-full max-w-md bg-[#0a1128] border border-orange-500/30 rounded-[48px] p-10 shadow-3xl transform transition-all scale-100">
+                    <div className="flex flex-col items-center text-center space-y-6">
+                      <div className="p-5 bg-white/5 rounded-full animate-pulse-orange">
+                        {planTutorialSteps[planTutorialStep].icon}
+                      </div>
+                      <div className="space-y-3">
+                        <h2 className="text-2xl font-black uppercase italic tracking-tighter text-orange-500">{planTutorialSteps[planTutorialStep].title}</h2>
+                        <p className="text-slate-400 text-sm leading-relaxed font-medium">{planTutorialSteps[planTutorialStep].description}</p>
+                      </div>
+                      <div className="flex gap-2 w-full pt-4">
+                        <div className="flex-1 flex gap-1 justify-center items-center">
+                          {planTutorialSteps.map((_, i) => (
+                            <div key={i} className={`h-1 rounded-full transition-all ${i === planTutorialStep ? 'w-6 bg-orange-600' : 'w-2 bg-slate-800'}`} />
+                          ))}
+                        </div>
+                        <button onClick={handlePlanTutorialNext} className="px-8 py-3 bg-orange-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-glow-orange hover:bg-orange-500 transition-all">
+                          {planTutorialStep === planTutorialSteps.length - 1 ? "Entendi" : "Próximo"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
           {activeTab === 'habits' && (
-            <div className="space-y-8 animate-in fade-in duration-500 relative">
-              {/* Habit Onboarding Overlay */}
-              {!hasSeenHabitOnboarding && (
-                <div className="absolute inset-0 z-[60] flex items-center justify-center p-4">
-                  <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-md rounded-[40px]" />
-                  <div className={`relative w-full max-w-xl p-10 border rounded-[48px] shadow-2xl animate-in zoom-in-95 duration-500 ${isDark ? 'bg-[#0a1128] border-orange-500/40' : 'bg-white border-orange-200'}`}>
-                    <div className="flex items-center gap-4 mb-6">
-                      <div className="w-12 h-12 rounded-2xl bg-orange-600/20 text-orange-500 flex items-center justify-center">
-                        <Target size={28} />
-                      </div>
-                      <h3 className="text-2xl font-black italic tracking-tight">Formação de Hábitos</h3>
-                    </div>
-                    
-                    <div className="space-y-6 text-sm">
-                      <div className="flex gap-4">
-                        <Anchor className="text-orange-500 shrink-0" size={24} />
-                        <div>
-                          <p className="font-bold text-orange-500 mb-1 uppercase text-[10px] tracking-widest">A Âncora (O Gatilho)</p>
-                          <p className="opacity-80">Não dependa da memória. Use um hábito que você já tem (ex: escovar dentes) como o gatilho para o novo. <span className="italic">"Depois de [Âncora], eu vou..."</span></p>
-                        </div>
-                      </div>
-                      
-                      <div className="flex gap-4">
-                        <Zap className="text-orange-500 shrink-0" size={24} />
-                        <div>
-                          <p className="font-bold text-orange-500 mb-1 uppercase text-[10px] tracking-widest">Micro-ação (Sem Fricção)</p>
-                          <p className="opacity-80">O cérebro odeia esforço. Reduza o hábito à sua forma mais simples. Se quer ler, a micro-ação é <span className="font-bold">"Ler 1 página"</span>. O objetivo é a consistência, não a intensidade.</p>
-                        </div>
-                      </div>
-
-                      <div className={`p-4 rounded-2xl border ${isDark ? 'bg-slate-900/50 border-orange-500/10' : 'bg-orange-50 border-orange-100'}`}>
-                         <p className="text-xs italic font-medium opacity-90"><span className="font-black text-orange-500">Ciência:</span> Cada 'Check' libera dopamina, sinalizando ao cérebro que este comportamento vale a pena ser repetido até virar automático.</p>
-                      </div>
-                    </div>
-
-                    <button onClick={dismissHabitOnboarding} className="mt-10 w-full py-4 bg-orange-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-orange-900/40 hover:bg-orange-500 transition-all active:scale-[0.98]">
-                      Entendido, vou aplicar!
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className={`col-span-2 border p-8 rounded-[40px] flex items-center justify-between ${isDark ? 'bg-[#0a1128] border-orange-500/30' : 'bg-white border-orange-100 shadow-lg'}`}>
-                   <div>
-                     <p className="text-[10px] font-black uppercase text-orange-400">Progresso Executivo</p>
-                     <h3 className="text-3xl font-black italic">{neuroLevel.title}</h3>
-                     <div className="mt-4 flex items-center gap-4">
-                       <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
-                         <div className="h-full bg-orange-500 transition-all duration-1000" style={{ width: `${Math.min(100, (points / neuroLevel.next) * 100)}%` }}></div>
-                       </div>
-                       <span className="text-xs font-mono">{points} XP</span>
+            <div className="space-y-12 animate-in slide-in-from-bottom duration-700">
+               <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                  {/* Habits Section */}
+                  <div className="space-y-8">
+                     <h2 className="text-3xl font-black flex items-center gap-4 italic uppercase text-orange-600"><RefreshCw size={28} /> Hábitos Atômicos</h2>
+                     <div className="space-y-4">
+                        {habits.map(h => (
+                          <div key={h.id} className="p-6 border rounded-[32px] bg-slate-900 border-slate-800 flex justify-between items-center group shadow-md hover:border-orange-500/30 transition-all">
+                             <div className="space-y-1">
+                                <p className="font-black text-lg">{h.text}</p>
+                                <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Âncora: {h.anchor}</p>
+                             </div>
+                             <div className="flex items-center gap-4">
+                                <div className="text-center">
+                                   <Flame size={20} className={h.streak > 0 ? "text-orange-500" : "text-slate-800"} />
+                                   <span className="text-[10px] font-black">{h.streak}</span>
+                                </div>
+                                <button 
+                                  onClick={() => completeHabit(h.id)} 
+                                  disabled={h.lastCompleted === new Date().toISOString().split('T')[0]}
+                                  className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${h.lastCompleted === new Date().toISOString().split('T')[0] ? 'bg-green-600 text-white' : 'bg-slate-800 text-slate-500 hover:bg-orange-600 hover:text-white'}`}
+                                >
+                                   {h.lastCompleted === new Date().toISOString().split('T')[0] ? <Check size={24}/> : <Plus size={24}/>}
+                                </button>
+                                <button onClick={() => deleteHabit(h.id)} className="p-2 text-slate-700 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16}/></button>
+                             </div>
+                          </div>
+                        ))}
+                        
+                        {!showHabitForm ? (
+                          <button onClick={() => setShowHabitForm(true)} className="w-full py-8 border-2 border-dashed border-slate-800 rounded-[32px] opacity-40 hover:opacity-100 transition-all flex items-center justify-center gap-2">
+                             <Plus size={20}/> Novo Hábito Neural
+                          </button>
+                        ) : (
+                          <form onSubmit={handleAddHabit} className="p-8 border-2 border-orange-500/30 rounded-[32px] bg-slate-900 space-y-4 animate-in zoom-in-95">
+                             <input required className="w-full p-4 bg-slate-800 rounded-2xl border-none outline-none text-sm" placeholder="Nome do hábito..." value={habitForm.text} onChange={e => setHabitForm({...habitForm, text: e.target.value})} />
+                             <input className="w-full p-4 bg-slate-800 rounded-2xl border-none outline-none text-sm" placeholder="Âncora (Ex: Após o banho)" value={habitForm.anchor} onChange={e => setHabitForm({...habitForm, anchor: e.target.value})} />
+                             <input className="w-full p-4 bg-slate-800 rounded-2xl border-none outline-none text-sm" placeholder="Micro-ação (Ex: Meditar 1 min)" value={habitForm.tinyAction} onChange={e => setHabitForm({...habitForm, tinyAction: e.target.value})} />
+                             <div className="flex gap-2">
+                                <button type="submit" className="flex-1 py-4 bg-orange-600 rounded-2xl font-black text-xs uppercase">Salvar Hábito</button>
+                                <button type="button" onClick={() => setShowHabitForm(false)} className="px-6 py-4 bg-slate-800 rounded-2xl font-black text-xs uppercase">X</button>
+                             </div>
+                          </form>
+                        )}
                      </div>
-                   </div>
-                   <Award className="text-orange-500" size={48}/>
-                </div>
-                <div className={`border p-8 rounded-[40px] flex flex-col items-center justify-center text-center ${isDark ? 'bg-[#0a1128] border-orange-500/30' : 'bg-white border-orange-100 shadow-lg'}`}>
-                  <TrendingUp className="text-orange-500 mb-2" size={24}/>
-                  <p className="text-[10px] font-black uppercase text-orange-400">Dopamina</p>
-                  <p className="text-4xl font-black">{points}</p>
-                </div>
-              </div>
-
-              <div className="flex gap-2 justify-end">
-                <button onClick={() => setShowRecurringForm(!showRecurringForm)} className={`px-6 py-3 border rounded-2xl font-bold flex items-center gap-2 transition-all ${showRecurringForm ? 'bg-orange-600 text-white shadow-glow-orange border-orange-500' : 'border-slate-800'}`}> <Repeat size={18}/> Tarefa Fixa </button>
-                <button onClick={() => { if(!hasSeenHabitOnboarding) return; setShowHabitForm(!showHabitForm); }} className={`px-6 py-3 bg-orange-600 text-white rounded-2xl font-bold flex items-center gap-2 transition-all`}> <Flame size={18}/> Novo Hábito </button>
-              </div>
-
-              {showRecurringForm && (
-                <div className={`p-8 border rounded-[32px] animate-in slide-in-from-top duration-300 ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200 shadow-xl'}`}>
-                  <h4 className="font-black uppercase text-sm mb-4">Nova Rotina Recorrente</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <input className={`md:col-span-2 p-4 rounded-xl border outline-none transition-all ${isDark ? 'bg-slate-800 border-slate-700 focus:border-orange-500' : 'bg-slate-50 border-slate-200 focus:border-orange-500'}`} placeholder="Nome da tarefa fixa" value={newRecurring.text} onChange={e => setNewRecurring({...newRecurring, text: e.target.value})} />
-                    <select className={`p-4 rounded-xl border outline-none ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'}`} value={newRecurring.frequency} onChange={e => setNewRecurring({...newRecurring, frequency: e.target.value as Frequency})}>
-                      <option value={Frequency.DAILY}>Todo Dia</option>
-                      <option value={Frequency.WEEKLY}>Semanal</option>
-                      <option value={Frequency.MONTHLY}>Mensal</option>
-                    </select>
-                    <select className={`p-4 rounded-xl border outline-none ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'}`} value={newRecurring.priority} onChange={e => setNewRecurring({...newRecurring, priority: e.target.value as Priority})}>
-                      <option value={Priority.Q1}>Urgente (Q1)</option>
-                      <option value={Priority.Q2}>Importante (Q2)</option>
-                      <option value={Priority.Q3}>Delegar (Q3)</option>
-                    </select>
                   </div>
-                  <button onClick={() => {
-                    if (!newRecurring.text) return;
-                    setRecurringTasks(prev => [...prev, { id: crypto.randomUUID(), ...newRecurring, completedDates: [] }]);
-                    setNewRecurring({ text: "", frequency: Frequency.DAILY, priority: Priority.Q2, energy: 'Média' });
-                    setShowRecurringForm(false);
-                  }} className="mt-4 w-full py-4 bg-orange-600 text-white rounded-xl font-black uppercase hover:bg-orange-500 transition-all shadow-lg">Ativar Rotina</button>
-                </div>
-              )}
 
-              {showHabitForm && (
-                <div className={`p-8 border rounded-[32px] animate-in slide-in-from-top duration-300 ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200 shadow-xl'}`}>
-                  <h4 className="font-black uppercase text-sm mb-4">Novo Hábito Atômico</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase text-slate-500 px-2">Hábito Alvo</label>
-                      <input className={`w-full p-4 rounded-xl border outline-none ${isDark ? 'bg-slate-800 border-slate-700 focus:border-orange-500' : 'bg-slate-50 border-slate-200 focus:border-orange-500'}`} placeholder="Ex: Ler mais" value={newHabit.text} onChange={e => setNewHabit({...newHabit, text: e.target.value})} />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase text-slate-500 px-2">Âncora (Depois de...)</label>
-                      <input className={`w-full p-4 rounded-xl border outline-none ${isDark ? 'bg-slate-800 border-slate-700 focus:border-orange-500' : 'bg-slate-50 border-slate-200 focus:border-orange-500'}`} placeholder="Ex: Tomar café" value={newHabit.anchor} onChange={e => setNewHabit({...newHabit, anchor: e.target.value})} />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase text-slate-500 px-2">Micro-ação (Mínimo)</label>
-                      <input className={`w-full p-4 rounded-xl border outline-none ${isDark ? 'bg-slate-800 border-slate-700 focus:border-orange-500' : 'bg-slate-50 border-slate-200 focus:border-orange-500'}`} placeholder="Ex: Ler 1 página" value={newHabit.tinyAction} onChange={e => setNewHabit({...newHabit, tinyAction: e.target.value})} />
-                    </div>
-                  </div>
-                  <button onClick={() => {
-                    if (!newHabit.text) return;
-                    setHabits(prev => [...prev, { id: crypto.randomUUID(), ...newHabit, streak: 0, lastCompleted: null }]);
-                    setNewHabit({ text: "", anchor: "", tinyAction: "" });
-                    setShowHabitForm(false);
-                  }} className="mt-4 w-full py-4 bg-orange-600 text-white rounded-xl font-black uppercase hover:bg-orange-500 transition-all shadow-lg">Implementar</button>
-                </div>
-              )}
+                  {/* Recurring Routines (Tarefas Fixas) */}
+                  <div className="space-y-8">
+                     <h2 className="text-3xl font-black flex items-center gap-4 italic uppercase text-blue-500"><Repeat size={28} /> Tarefas Fixas</h2>
+                     <div className="space-y-10">
+                        {/* Grupos por Frequência */}
+                        {[Frequency.DAILY, Frequency.WEEKLY, Frequency.MONTHLY, Frequency.ANNUALLY].map(freq => {
+                          const tasksOfFreq = recurringTasks.filter(rt => rt.frequency === freq);
+                          if (tasksOfFreq.length === 0 && !showRecurringForm) return null;
+                          if (tasksOfFreq.length === 0 && showRecurringForm && recurringForm.frequency !== freq) return null;
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <div className="space-y-4">
-                  <h3 className="text-xs font-black uppercase flex items-center gap-2 text-slate-500"><Repeat size={14}/> Rotinas Fixas</h3>
-                  <div className="grid grid-cols-1 gap-3">
-                    {recurringTasks.map(rec => {
-                      const isCompletedToday = tasks.some(t => t.text === rec.text && t.date === selectedDate && t.completed);
-                      return (
-                        <div key={rec.id} className={`relative group flex items-center justify-between p-5 rounded-[28px] border transition-all overflow-hidden ${isDark ? 'bg-[#0a1128] border-slate-800' : 'bg-white border-slate-200 shadow-sm'} ${isCompletedToday ? 'opacity-60 grayscale-[0.5]' : ''} ${sparklingId === rec.id ? 'animate-card-win' : ''}`}>
-                          {sparklingId === rec.id && <SparkleBurst />}
-                          <div className="flex items-center gap-4">
-                            <button 
-                              onClick={() => toggleRecurringCheck(rec)}
-                              className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all border-2 ${isCompletedToday ? 'bg-orange-600 border-orange-500 text-white' : 'border-slate-800 text-slate-700 hover:border-orange-500'}`}
-                            >
-                              {isCompletedToday ? <CheckCircle size={24} /> : <div className="w-5 h-5 rounded-full border-2 border-current opacity-30" />}
-                            </button>
-                            <div>
-                              <p className={`font-black text-sm transition-all ${isCompletedToday ? 'line-through opacity-50' : ''}`}>{rec.text}</p>
-                              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{rec.frequency} • {rec.priority}</span>
+                          return (
+                            <div key={freq} className="space-y-4">
+                              <h3 className="text-[10px] font-black uppercase text-slate-500 tracking-widest border-b border-slate-800 pb-2">{freq}</h3>
+                              <div className="space-y-3">
+                                {tasksOfFreq.map(rt => {
+                                  const done = isRecurringDoneToday(rt);
+                                  return (
+                                    <div key={rt.id} className="p-5 border rounded-3xl bg-slate-900 border-slate-800 flex justify-between items-center group hover:border-blue-500/30 transition-all">
+                                      <div className="flex items-center gap-4">
+                                        <button 
+                                          onClick={() => toggleRecurringTask(rt.id)}
+                                          className={`w-8 h-8 rounded-xl flex items-center justify-center border-2 transition-all ${done ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-800 text-transparent hover:border-blue-500'}`}
+                                        >
+                                          <Check size={18} />
+                                        </button>
+                                        <div className="space-y-1">
+                                          <p className={`font-black text-base ${done ? 'line-through opacity-40' : ''}`}>{rt.text}</p>
+                                          <div className="flex gap-2">
+                                            <EnergyBadge energy={rt.energy} />
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <button onClick={() => deleteRecurring(rt.id)} className="p-2 text-slate-700 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16}/></button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             </div>
-                          </div>
-                          <button onClick={() => setRecurringTasks(ts => ts.filter(t => t.id !== rec.id))} className="opacity-0 group-hover:opacity-100 p-2 text-slate-600 hover:text-red-500 transition-all">
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-                      );
-                    })}
-                    {recurringTasks.length === 0 && <p className="text-xs text-slate-500 italic py-8 text-center border-2 border-dashed border-slate-800/20 rounded-[32px]">Nenhuma rotina fixa configurada.</p>}
-                  </div>
-                </div>
+                          );
+                        })}
 
-                <div className="space-y-4">
-                  <h3 className="text-xs font-black uppercase flex items-center gap-2 text-slate-500"><Flame size={14}/> Seus Hábitos</h3>
-                  <div className="grid grid-cols-1 gap-3">
-                    {habits.map(habit => (
-                      <div key={habit.id} className={`relative group border p-6 rounded-[28px] flex flex-col transition-all overflow-hidden ${isDark ? 'bg-[#0a1128] border-slate-800 hover:border-orange-500/30' : 'bg-white border-slate-200 shadow-sm'} ${sparklingId === habit.id ? 'animate-card-win' : ''}`}>
-                        {sparklingId === habit.id && <SparkleBurst />}
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h4 className="font-black text-lg">{habit.text}</h4>
-                            <p className={`text-[11px] mt-1 font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-                              {`"${habit.anchor}" → ${habit.tinyAction}`}
-                            </p>
-                          </div>
-                          <button onClick={() => setHabits(hs => hs.filter(h => h.id !== habit.id))} className="opacity-0 group-hover:opacity-100 p-2 text-slate-600 hover:text-red-500 transition-all">
-                            <Trash2 size={18} />
+                        {!showRecurringForm ? (
+                          <button onClick={() => setShowRecurringForm(true)} className="w-full py-8 border-2 border-dashed border-slate-800 rounded-[32px] opacity-40 hover:opacity-100 transition-all flex items-center justify-center gap-2">
+                             <Plus size={20}/> Nova Tarefa Fixa
                           </button>
-                        </div>
-                        <div className="mt-6 flex items-center justify-between gap-4">
-                          <div className="flex items-center gap-2">
-                             <Flame className="text-orange-500" size={16} />
-                             <span className="text-xs font-black">{habit.streak} dias</span>
-                          </div>
-                          <button 
-                            onClick={() => handleHabitCheck(habit.id)} 
-                            className="px-6 py-2 bg-orange-600/10 text-orange-500 border border-orange-500/20 rounded-xl text-[10px] font-black uppercase hover:bg-orange-600 hover:text-white transition-all active:scale-95 flex items-center gap-2"
-                          >
-                            <Star size={12} className={sparklingId === habit.id ? 'animate-spin' : ''} />
-                            Check (+25 XP)
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                    {habits.length === 0 && <p className="text-xs text-slate-500 italic py-8 text-center border-2 border-dashed border-slate-800/20 rounded-[32px]">Comece um hábito atômico.</p>}
+                        ) : (
+                          <form onSubmit={handleAddRecurring} className="p-8 border-2 border-blue-500/30 rounded-[32px] bg-slate-900 space-y-6 animate-in zoom-in-95">
+                             <div className="space-y-4">
+                               <input required className="w-full p-4 bg-slate-800 rounded-2xl border-none outline-none text-sm" placeholder="O que se repete?" value={recurringForm.text} onChange={e => setRecurringForm({...recurringForm, text: e.target.value})} />
+                               
+                               <div className="space-y-2">
+                                 <p className="text-[10px] font-black uppercase text-slate-500">Frequência</p>
+                                 <div className="grid grid-cols-2 gap-2">
+                                   {[Frequency.DAILY, Frequency.WEEKLY, Frequency.MONTHLY, Frequency.ANNUALLY].map(f => (
+                                     <button key={f} type="button" onClick={() => setRecurringForm({...recurringForm, frequency: f})} className={`p-3 rounded-xl text-[10px] font-black uppercase border transition-all ${recurringForm.frequency === f ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-800 text-slate-500'}`}>
+                                       {f}
+                                     </button>
+                                   ))}
+                                 </div>
+                               </div>
+
+                               <div className="space-y-2">
+                                 <p className="text-[10px] font-black uppercase text-slate-500">Gasto de Energia</p>
+                                 <div className="flex gap-2">
+                                   {(['Baixa', 'Média', 'Alta'] as Task['energy'][]).map(e => (
+                                     <button key={e} type="button" onClick={() => setRecurringForm({...recurringForm, energy: e})} className={`flex-1 p-3 rounded-xl text-[10px] font-black uppercase border transition-all ${recurringForm.energy === e ? 'bg-slate-700 border-slate-600 text-white' : 'border-slate-800 text-slate-500'}`}>
+                                       {e}
+                                     </button>
+                                   ))}
+                                 </div>
+                               </div>
+                             </div>
+
+                             <div className="flex gap-2">
+                                <button type="submit" className="flex-1 py-4 bg-blue-600 rounded-2xl font-black text-xs uppercase shadow-glow-blue">Salvar Rotina</button>
+                                <button type="button" onClick={() => setShowRecurringForm(false)} className="px-6 py-4 bg-slate-800 rounded-2xl font-black text-xs uppercase">X</button>
+                             </div>
+                          </form>
+                        )}
+                     </div>
                   </div>
-                </div>
-              </div>
+               </div>
+            </div>
+          )}
+
+          {activeTab === 'dopamenu' && (
+            <div className="space-y-12 animate-in zoom-in-95 duration-700">
+               <div className="text-center space-y-3">
+                  <h2 className="text-5xl font-black italic tracking-tighter uppercase">Dopamenu</h2>
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Gestão de Recompensa Saudável</p>
+               </div>
+               
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {(['Starter', 'Main', 'Side', 'Dessert'] as const).map(cat => (
+                    <div key={cat} className="p-10 border rounded-[56px] bg-slate-900/40 border-slate-800 group relative">
+                       <div className="flex items-center justify-between mb-8">
+                          <h3 className="text-[10px] font-black uppercase text-orange-500 flex items-center gap-3 tracking-widest">
+                             {cat === 'Starter' ? 'Entradas (2-5 min)' : cat === 'Main' ? 'Principais (Recarga)' : cat === 'Side' ? 'Acompanhamentos' : 'Sobremesas (Moderação)'}
+                          </h3>
+                          <button onClick={() => addDopamenuItem(cat)} className="p-2 bg-white/5 hover:bg-orange-500/20 rounded-full transition-all">
+                             <Plus size={16} />
+                          </button>
+                       </div>
+                       <div className="space-y-4">
+                          {dopamenuItems.filter(i => i.category === cat).map((item, idx) => (
+                            <div key={idx} className="relative group/item">
+                              <button 
+                                onClick={() => handleDopamenuAction(item.label)}
+                                className="w-full p-6 rounded-[32px] bg-slate-900 border border-slate-800 text-left hover:scale-[1.02] active:scale-95 transition-all flex flex-col gap-1 pr-12"
+                              >
+                                 <p className="text-lg font-black group-hover:text-orange-500">{item.label}</p>
+                                 <p className="text-[10px] text-slate-500 uppercase">{item.description}</p>
+                              </button>
+                              <button onClick={() => removeDopamenuItem(item.label)} className="absolute right-4 top-1/2 -translate-y-1/2 p-2 text-slate-800 hover:text-red-500 opacity-0 group-hover/item:opacity-100 transition-all">
+                                 <Trash2 size={16}/>
+                              </button>
+                            </div>
+                          ))}
+                       </div>
+                    </div>
+                  ))}
+               </div>
             </div>
           )}
 
           {activeTab === 'capture' && (
-            <div className="max-w-2xl mx-auto space-y-8 animate-in zoom-in-95 duration-500 text-center py-10">
-              <h2 className="text-4xl font-black tracking-tighter">Capture seu Pensamento</h2>
-              <div className={`p-8 rounded-[40px] shadow-2xl border ${isDark ? 'bg-[#0a1128] border-slate-800' : 'bg-white border-slate-200'}`}>
-                <div className="flex gap-4">
-                  <input autoFocus className={`flex-1 bg-transparent border-none rounded-3xl px-6 py-6 text-xl outline-none focus:ring-2 focus:ring-orange-600 ${isDark ? 'text-white' : 'text-slate-900'}`} placeholder="O que está na sua mente?" value={newTaskText} onChange={e => setNewTaskText(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTask()}/>
-                  <button onClick={addTask} className="w-20 h-20 bg-orange-600 text-white rounded-3xl flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-xl shadow-orange-900/40"> <Plus size={32} strokeWidth={3}/> </button>
-                </div>
-              </div>
+            <div className="max-w-3xl mx-auto py-24 space-y-16 text-center animate-in fade-in duration-1000">
+               <div className="space-y-4">
+                 <h2 className="text-6xl font-black italic tracking-tighter uppercase">Captura Atômica</h2>
+                 <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Remova a carga mental agora</p>
+               </div>
+               
+               <div className="space-y-8">
+                 <div className="p-10 bg-slate-900 border border-slate-800 rounded-[64px] shadow-2xl flex items-center gap-6 group hover:border-orange-500/50 transition-all">
+                    <input autoFocus className="flex-1 bg-transparent border-none text-3xl font-black outline-none placeholder:text-slate-800" placeholder="O que está na mente?" value={newTaskText} onChange={e => setNewTaskText(e.target.value)} onKeyDown={e => { if(e.key === 'Enter') { addTask(newTaskText); setNewTaskText(""); setActiveTab('plan'); }}} />
+                    <button onClick={() => { addTask(newTaskText); setNewTaskText(""); setActiveTab('plan'); }} className="w-24 h-24 bg-orange-600 rounded-[40px] flex items-center justify-center shadow-glow-orange active:scale-90 transition-all"><Plus size={48} className="text-white"/></button>
+                 </div>
+
+                 <div className="flex flex-col items-center gap-4 animate-in slide-in-from-bottom duration-500">
+                    <p className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em]">Estimativa de Gasto Energético</p>
+                    <div className="flex gap-4 w-full max-w-sm">
+                      {(['Baixa', 'Média', 'Alta'] as Task['energy'][]).map(e => (
+                        <button key={e} onClick={() => setCaptureEnergy(e)} className={`flex-1 py-4 rounded-3xl text-xs font-black uppercase border-2 transition-all ${captureEnergy === e ? (e === 'Baixa' ? 'bg-green-600 border-green-600' : e === 'Média' ? 'bg-yellow-600 border-yellow-600' : 'bg-red-600 border-red-600') + ' text-white scale-110 shadow-xl' : 'border-slate-800 text-slate-500 hover:border-slate-700'}`}>
+                          {e}
+                        </button>
+                      ))}
+                    </div>
+                 </div>
+               </div>
             </div>
           )}
         </div>
       </main>
 
-      {/* Tutorial / Onboarding Modal */}
+      {/* Tutorial */}
       {showTutorial && (
-        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-500" />
-          <div className={`relative w-full max-w-2xl border rounded-[48px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-500 ${isDark ? 'bg-[#0a1128] border-orange-500/30' : 'bg-white border-orange-100'}`}>
-            <div className="absolute top-0 left-0 w-full h-1 bg-slate-800">
-              <div className="h-full bg-orange-500 transition-all duration-500" style={{ width: `${((tutorialStep + 1) / tutorialSteps.length) * 100}%` }}></div>
-            </div>
-            
-            <div className="p-10 md:p-14 text-center space-y-8">
-              <div className="flex justify-center mb-6">
-                <div className="w-24 h-24 rounded-[32px] bg-orange-600/10 flex items-center justify-center animate-glow-orange">
-                  {tutorialSteps[tutorialStep].icon}
-                </div>
-              </div>
-              
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="w-full max-w-lg bg-[#0a1128] border border-slate-800 rounded-[56px] p-12 shadow-2xl">
+            <div className="flex flex-col items-center text-center space-y-8">
+              <div className={`${tutorialSteps[tutorialStep].color} p-6 bg-white/5 rounded-[40px]`}>{tutorialSteps[tutorialStep].icon}</div>
               <div className="space-y-4">
-                <h2 className="text-3xl font-black italic tracking-tight">{tutorialSteps[tutorialStep].title}</h2>
-                <p className={`text-lg leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{tutorialSteps[tutorialStep].desc}</p>
+                <h2 className="text-3xl font-black italic uppercase">{tutorialSteps[tutorialStep].title}</h2>
+                <p className="text-slate-400 leading-relaxed font-medium">{tutorialSteps[tutorialStep].description}</p>
               </div>
-              
-              <div className={`p-6 rounded-3xl border ${isDark ? 'bg-slate-900/50 border-orange-500/20' : 'bg-orange-50 border-orange-100'}`}>
-                <div className="flex items-start gap-3 text-left">
-                  <Lightbulb size={20} className="text-orange-500 shrink-0 mt-1" />
-                  <p className="text-xs font-bold italic opacity-80 leading-snug">
-                    <span className="uppercase text-[10px] tracking-widest block mb-1 text-orange-500">Teoria Neural</span>
-                    {tutorialSteps[tutorialStep].theory}
-                  </p>
-                </div>
-              </div>
-              
-              <div className="flex gap-4 pt-4">
-                <button onClick={completeTutorial} className="px-8 py-4 text-xs font-black uppercase text-slate-500 hover:text-orange-500 transition-colors">Pular Tudo</button>
-                <button 
-                  onClick={() => {
-                    if (tutorialStep < tutorialSteps.length - 1) {
-                      setTutorialStep(s => s + 1);
-                    } else {
-                      completeTutorial();
-                    }
-                  }} 
-                  className="flex-1 py-4 bg-orange-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-orange-900/40 hover:bg-orange-500 transition-all flex items-center justify-center gap-2"
-                >
-                  {tutorialStep === tutorialSteps.length - 1 ? "Começar Execução" : "Próximo Passo"}
-                  <ChevronRight size={20} />
-                </button>
-              </div>
+              <button onClick={handleTutorialNext} className="w-full py-5 bg-orange-600 text-white rounded-3xl font-black uppercase tracking-widest shadow-glow-orange hover:bg-orange-500 transition-all">
+                {tutorialStep === tutorialSteps.length - 1 ? "Entendido" : "Próximo"}
+              </button>
             </div>
           </div>
         </div>
       )}
 
+      {/* Panic Modal */}
       {panicTask && (
-        <div className="fixed inset-0 backdrop-blur-xl z-[200] flex items-center justify-center p-4 bg-[#020617]/95">
-          <div className={`w-full max-w-xl border rounded-[48px] overflow-hidden ${isDark ? 'bg-[#0a1128] border-orange-500/30' : 'bg-white border-orange-100 shadow-2xl'}`}>
-            <div className="p-8 border-b border-orange-600/20 flex justify-between items-center">
-              <div className="flex items-center gap-4"><BrainCircuit className="text-orange-600" size={32} /><h3 className="font-black text-xl">Resgate Neural</h3></div>
-              <button onClick={() => setPanicTask(null)}><X size={24}/></button>
-            </div>
-            <div className="p-10 space-y-6">
-              {!panicSolution ? (
-                <div className="space-y-6">
-                  <textarea autoFocus className={`w-full border rounded-[32px] p-6 text-sm outline-none resize-none h-32 ${isDark ? 'bg-[#020617] border-slate-800 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} placeholder="O que está impedindo você agora?" value={obstacleInput} onChange={e => setObstacleInput(e.target.value)}/>
-                  <button onClick={async () => {
-                    setIsRescuing(true);
-                    const res = await geminiService.rescueTask(panicTask.text, obstacleInput);
-                    setPanicSolution(res);
-                    setIsRescuing(false);
-                  }} disabled={isRescuing || !obstacleInput.trim()} className="w-full py-5 bg-orange-600 text-white rounded-3xl font-black uppercase tracking-widest shadow-2xl"> {isRescuing ? "Analisando..." : "SOLICITAR RESGATE"} </button>
-                </div>
-              ) : (
-                <div className="space-y-6 animate-in slide-in-from-bottom duration-500">
-                  <p className="text-sm font-medium italic opacity-80">"{panicSolution.diagnosis}"</p>
-                  <div className="space-y-3">
-                    {panicSolution.steps.map((step, i) => (
-                      <div key={i} className="flex gap-4 p-5 border rounded-3xl bg-slate-800/20 border-slate-700">
-                        <div className="w-6 h-6 rounded-full border border-orange-500/30 flex items-center justify-center text-xs font-black">{i + 1}</div>
-                        <p className="text-sm">{step}</p>
-                      </div>
-                    ))}
-                  </div>
-                  <button onClick={() => { setPanicTask(null); setPanicSolution(null); }} className="w-full py-4 rounded-2xl bg-white text-slate-900 font-black uppercase text-xs">Entendido</button>
-                </div>
-              )}
-            </div>
+        <div className="fixed inset-0 z-[400] backdrop-blur-3xl flex items-center justify-center p-4 bg-red-950/90">
+          <div className="w-full max-w-xl p-12 rounded-[56px] border border-red-500/30 bg-slate-900 shadow-2xl animate-in zoom-in-95">
+             <div className="flex justify-between items-center mb-10"><h2 className="text-3xl font-black text-red-500 uppercase tracking-tighter italic flex items-center gap-4"><AlertTriangle size={32}/> Resgate Neural</h2><button onClick={() => { setPanicTask(null); setPanicSolution(null); }}><X /></button></div>
+             {!panicSolution ? (
+               <div className="space-y-8">
+                 <p className="text-lg font-medium opacity-80 leading-relaxed">Qual o bloqueio para <strong>"{panicTask.text}"</strong>?</p>
+                 <textarea className="w-full p-8 rounded-[32px] border bg-slate-800/50 border-slate-700 outline-none min-h-[160px] text-xl" value={obstacleInput} onChange={e => setObstacleInput(e.target.value)} />
+                 <button onClick={async () => { setIsRescuing(true); const res = await geminiService.rescueTask(panicTask.text, obstacleInput); setPanicSolution(res); setIsRescuing(false); }} className="w-full py-6 bg-red-600 text-white rounded-[32px] font-black uppercase flex items-center justify-center gap-4 transition-all">{isRescuing ? <RefreshCw className="animate-spin" size={24}/> : "Gerar Protocolo"}</button>
+               </div>
+             ) : (
+               <div className="space-y-8">
+                 <div className="p-8 bg-red-600/10 border border-red-500/20 rounded-[40px] space-y-2"><p className="text-[10px] font-black text-red-500 uppercase">Diagnóstico</p><p className="text-xl font-bold italic">"{panicSolution.diagnosis}"</p></div>
+                 <div className="space-y-4">{panicSolution.steps.map((s, i) => (<div key={i} className="p-6 bg-slate-800 rounded-[32px] flex items-center gap-6 border border-slate-700"><span className="w-10 h-10 rounded-full bg-red-600 text-white flex items-center justify-center text-xs font-black">{i+1}</span><p className="text-sm font-medium leading-relaxed">{s}</p></div>))}</div>
+                 <button onClick={() => { setPanicTask(null); setPanicSolution(null); }} className="w-full py-6 border-2 border-slate-800 rounded-[32px] font-black uppercase text-xs tracking-widest text-slate-500">Voltar à Ativa</button>
+               </div>
+             )}
           </div>
-        </div>
-      )}
-
-      {identityBoost && (
-        <div className="fixed top-6 right-6 z-[200] w-80 p-6 rounded-3xl bg-orange-600 text-white shadow-2xl animate-in slide-in-from-right duration-500">
-          <p className="text-xs font-bold uppercase tracking-widest opacity-60 mb-1">Dopamina Extra</p>
-          <p className="text-sm font-medium italic">"{identityBoost.text}"</p>
         </div>
       )}
     </div>
   );
 };
 
-const NavButton: React.FC<{ isDark: boolean, icon: React.ReactNode, label: string, active: boolean, onClick: () => void }> = ({ isDark, icon, label, active, onClick }) => (
-  <button onClick={onClick} className={`flex flex-col items-center justify-center p-3 rounded-2xl transition-all md:flex-row md:justify-start md:gap-4 md:w-full md:px-6 md:py-4 ${active ? 'bg-orange-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-800'}`}>
-    {icon}
-    <span className="text-[9px] mt-1 font-black uppercase md:text-xs md:mt-0">{label}</span>
+const NavButton: React.FC<{ icon: React.ReactNode, label: string, active: boolean, onClick: () => void }> = ({ icon, label, active, onClick }) => (
+  <button onClick={onClick} className={`flex flex-col items-center justify-center p-4 rounded-[28px] transition-all md:flex-row md:justify-start md:gap-5 md:w-full md:px-8 md:py-5 ${active ? 'bg-orange-600 text-white shadow-2xl scale-[1.05]' : 'text-slate-500 hover:bg-slate-800/50'}`}>
+    {icon}<span className="text-[10px] mt-2 font-black uppercase md:text-sm md:mt-0 md:tracking-widest">{label}</span>
   </button>
 );
 
-const MatrixQuadrant: React.FC<{ 
-  isDark: boolean, 
-  priority: Priority, 
-  title: string, 
-  desc: string, 
-  tasks: Task[], 
-  onSelect: (t: Task) => void, 
-  onTabChange: () => void, 
-  onMoveTask: (taskId: string, newPriority: Priority) => void 
-}> = ({ isDark, priority, title, desc, tasks, onSelect, onTabChange, onMoveTask }) => {
-  const [isOver, setIsOver] = useState(false);
-  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsOver(true); };
-  const handleDrop = (e: React.DragEvent) => { e.preventDefault(); setIsOver(false); const tid = e.dataTransfer.getData("taskId"); if (tid) onMoveTask(tid, priority); };
+const EnergyBadge: React.FC<{ energy: Task['energy'] }> = ({ energy }) => {
+  const colors = {
+    'Baixa': 'bg-green-600/20 text-green-500',
+    'Média': 'bg-yellow-600/20 text-yellow-500',
+    'Alta': 'bg-red-600/20 text-red-500'
+  };
+  return (
+    <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${colors[energy]}`}>
+      {energy} Energia
+    </span>
+  );
+};
+
+const MatrixQuadrant: React.FC<{ priority: Priority, title: string, color: string, tasks: Task[], onSelect: (t: Task) => void, onDrop: (taskId: string, newPriority: Priority) => void }> = ({ priority, title, color, tasks, onSelect, onDrop }) => {
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); e.currentTarget.classList.add('ring-2', 'ring-orange-500', 'bg-orange-500/10'); };
+  const handleDragLeave = (e: React.DragEvent) => { e.currentTarget.classList.remove('ring-2', 'ring-orange-500', 'bg-orange-500/10'); };
+  const handleOnDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.currentTarget.classList.remove('ring-2', 'ring-orange-500', 'bg-orange-500/10');
+    const taskId = e.dataTransfer.getData("taskId");
+    if(taskId) onDrop(taskId, priority);
+  };
 
   return (
-    <div onDragOver={handleDragOver} onDragLeave={() => setIsOver(false)} onDrop={handleDrop} className={`h-[350px] border rounded-[40px] p-8 flex flex-col transition-all ${isDark ? 'border-slate-800 bg-slate-900/50' : 'bg-white border-slate-200'} ${isOver ? 'ring-2 ring-orange-500 ring-inset border-transparent' : ''}`}>
-      <h4 className="font-black text-xl uppercase italic tracking-tighter">{title}</h4>
-      <p className="text-[10px] font-bold opacity-40 uppercase tracking-widest">{desc}</p>
-      <div className="flex-1 overflow-y-auto mt-6 space-y-2">
+    <div onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleOnDrop} className={`p-10 border rounded-[48px] ${color} min-h-[420px] shadow-sm transition-all duration-200 relative`}>
+      <h3 className="font-black uppercase text-[10px] tracking-widest text-slate-500 mb-8">{title}</h3>
+      <div className="space-y-4 overflow-y-auto max-h-[300px] pr-2 scrollbar-thin">
         {tasks.map(t => (
-          <div key={t.id} draggable={true} onDragStart={(e) => e.dataTransfer.setData("taskId", t.id)} className="p-4 rounded-2xl border border-slate-800/50 flex items-center justify-between group hover:border-orange-500/30 transition-all cursor-grab active:cursor-grabbing bg-[#0a1128]/40">
-            <span className="text-xs font-bold truncate opacity-80">{t.text}</span>
-            <button onClick={() => { onSelect(t); onTabChange(); }} className="w-8 h-8 rounded-xl bg-orange-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"> <Play size={12} fill="currentColor"/> </button>
+          <div key={t.id} draggable onDragStart={(e) => e.dataTransfer.setData("taskId", t.id)} className="w-full p-6 text-left bg-slate-900 border border-slate-800 rounded-3xl flex justify-between items-center hover:border-orange-500/50 transition-all cursor-grab active:cursor-grabbing shadow-sm group">
+            <div className="flex flex-col gap-2 flex-1">
+              <span onClick={() => onSelect(t)} className="text-sm font-black truncate opacity-80">{t.text}</span>
+              <div className="flex gap-2">
+                <EnergyBadge energy={t.energy} />
+              </div>
+            </div>
+            <div className="flex items-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+               <button 
+                onClick={() => onSelect(t)}
+                title="Focar nesta tarefa"
+                className="w-10 h-10 flex items-center justify-center bg-orange-600/10 hover:bg-orange-600 text-orange-500 hover:text-white rounded-2xl transition-all shadow-lg active:scale-90"
+               >
+                 <Target size={20} />
+               </button>
+               <GripVertical size={16} className="text-slate-700" />
+            </div>
           </div>
         ))}
+        {tasks.length === 0 && <div className="py-16 text-center opacity-10 font-black text-xs uppercase italic tracking-widest border-2 border-dashed border-slate-800 rounded-[32px]">Deposite Tarefas</div>}
       </div>
     </div>
   );
