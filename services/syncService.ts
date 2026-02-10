@@ -1,8 +1,9 @@
 
 import { User, Task, Habit, RecurringTask } from "../types";
 
-// Bucket de produção único para o NeuroExecutor V1
-const BASE_URL = "https://kvdb.io/NeuroExecutor_V1_Production_Cloud_777/";
+// Bucket persistente. Usando um identificador mais robusto.
+const BUCKET_ID = "NeuroExecutor_V1_Cloud_Final_99";
+const BASE_URL = `https://kvdb.io/${BUCKET_ID}/`;
 
 async function hashString(str: string) {
   const encoder = new TextEncoder();
@@ -15,13 +16,24 @@ export const syncService = {
   async saveUser(user: any) {
     try {
       const key = await hashString(user.email);
-      await fetch(`${BASE_URL}user_${key}`, {
+      const payload = {
+        id: user.id,
+        name: user.name,
+        email: user.email.toLowerCase().trim(),
+        password: user.password,
+        createdAt: Date.now()
+      };
+      
+      const response = await fetch(`${BASE_URL}user_${key}`, {
         method: 'POST',
-        body: JSON.stringify({ id: user.id, name: user.name, email: user.email, password: user.password })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
       });
+      
+      if (!response.ok) throw new Error("Falha ao salvar usuário na KV");
       return true;
     } catch (e) {
-      console.error("Erro ao salvar usuário na nuvem", e);
+      console.error("Erro Crítico no saveUser:", e);
       return false;
     }
   },
@@ -31,32 +43,43 @@ export const syncService = {
       const key = await hashString(email);
       const res = await fetch(`${BASE_URL}user_${key}`);
       if (!res.ok) return null;
-      return await res.json();
+      const data = await res.json();
+      return data;
     } catch (e) {
+      console.error("Erro ao buscar usuário:", e);
       return null;
     }
   },
 
   async pushData(email: string, data: any) {
+    if (!email || email === 'guest@neuro.com') return false;
     try {
       const key = await hashString(email);
-      await fetch(`${BASE_URL}data_${key}`, {
+      const response = await fetch(`${BASE_URL}data_${key}`, {
         method: 'POST',
-        body: JSON.stringify(data)
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...data,
+          lastSync: Date.now()
+        })
       });
-      return true;
+      return response.ok;
     } catch (e) {
+      console.error("Erro no pushData:", e);
       return false;
     }
   },
 
   async pullData(email: string) {
+    if (!email || email === 'guest@neuro.com') return null;
     try {
       const key = await hashString(email);
       const res = await fetch(`${BASE_URL}data_${key}`);
       if (!res.ok) return null;
-      return await res.json();
+      const data = await res.json();
+      return data;
     } catch (e) {
+      console.error("Erro no pullData:", e);
       return null;
     }
   }

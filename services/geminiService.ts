@@ -5,15 +5,24 @@ import { Priority, Task, PanicSolution } from "../types";
 // Complex tasks should use gemini-3-pro-preview for advanced reasoning
 const modelName = 'gemini-3-pro-preview';
 
+// System Instruction robusta para garantir o "pensamento" neuropsicológico
+const SYSTEM_INSTRUCTION = `Você é um especialista em Neuropsicologia da Produtividade e Funções Executivas. 
+Sua missão é ajudar o usuário a superar a procrastinação, a paralisia de decisão e a fadiga mental. 
+Ao categorizar ou decompor tarefas, utilize conceitos como 'Carga Cognitiva', 'Dopamina Sustentada' e 'Andaimação Neural'.
+Não dê respostas óbvias; pense profundamente sobre a barreira psicológica de cada tarefa.`;
+
 export const geminiService = {
   async categorizeTasks(tasks: Task[]): Promise<{ id: string; priority: Priority; energy: Task['energy'] }[]> {
     try {
-      // Initialize ai instance with process.env.API_KEY directly as per guidelines
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: modelName,
-        contents: `Analise as seguintes tarefas e categorize-as por Prioridade (Eisenhower: Q1-Urgente, Q2-Estratégico, Q3-Delegável, Q4-Eliminar) e Energia (Baixa, Média, Alta): ${JSON.stringify(tasks.map(t => ({ id: t.id, text: t.text })))}`,
+        contents: `Analise estas tarefas e categorize-as por Prioridade (Eisenhower) e Gasto de Energia (Baixa/Média/Alta). 
+        Considere a complexidade inerente de cada texto: ${JSON.stringify(tasks.map(t => ({ id: t.id, text: t.text })))}`,
         config: {
+          systemInstruction: SYSTEM_INSTRUCTION,
+          // Ativando o orçamento de pensamento para respostas mais analíticas
+          thinkingConfig: { thinkingBudget: 2000 },
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.ARRAY,
@@ -29,7 +38,6 @@ export const geminiService = {
           }
         }
       });
-      // response.text is a property, not a function
       return JSON.parse(response.text || '[]');
     } catch (error: any) {
       console.error("Erro ao categorizar tarefas:", error);
@@ -42,8 +50,11 @@ export const geminiService = {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: modelName,
-        contents: `Decomponha a tarefa "${taskText}" em 5 micro-passos minúsculos e granulares para reduzir a fricção executiva. Seja extremamente específico.`,
+        contents: `Decomponha a tarefa "${taskText}" em 5 micro-passos. 
+        O primeiro passo deve ser tão ridículo e fácil que é impossível não fazer (ex: 'abrir a tampa da caneta').`,
         config: {
+          systemInstruction: SYSTEM_INSTRUCTION,
+          thinkingConfig: { thinkingBudget: 4000 }, // Mais pensamento para decomposição lógica
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
@@ -61,7 +72,7 @@ export const geminiService = {
       return result.steps;
     } catch (error: any) {
       console.error("Erro ao decompor tarefa:", error);
-      return ["Tente dividir a tarefa manualmente em passos menores (Erro de conexão)."];
+      return ["Inicie com a menor ação possível.", "Prepare seu ambiente.", "Foque por 5 minutos."];
     }
   },
 
@@ -70,8 +81,11 @@ export const geminiService = {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: modelName,
-        contents: `O usuário está travado na tarefa "${taskText}" devido a: "${obstacle}". Identifique a barreira neuropsicológica e forneça um protocolo de 3 passos para destravar agora.`,
+        contents: `O usuário está paralisado na tarefa "${taskText}" pelo motivo: "${obstacle}". 
+        Forneça um diagnóstico neuropsicológico e um protocolo de resgate imediato.`,
         config: {
+          systemInstruction: SYSTEM_INSTRUCTION,
+          thinkingConfig: { thinkingBudget: 8000 }, // Orçamento alto para análise de crise
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
@@ -88,9 +102,9 @@ export const geminiService = {
     } catch (error: any) {
       console.error("Erro no resgate neural:", error);
       return {
-        diagnosis: "Falha na conexão neural.",
-        steps: ["Respire fundo por 30 segundos.", "Faça a menor ação possível.", "Beba um copo de água."],
-        encouragement: "Você consegue recomeçar, mesmo sem IA no momento."
+        diagnosis: "Sobrecarga de processamento.",
+        steps: ["Afaste-se da tela por 2 minutos.", "Beba água gelada.", "Escreva apenas a primeira palavra da tarefa."],
+        encouragement: "O progresso é melhor que a perfeição."
       };
     }
   },
@@ -100,8 +114,9 @@ export const geminiService = {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: modelName,
-        contents: `O usuário acabou de completar a tarefa: "${taskText}". Gere um feedback curto de 2 linhas focado em neuroplasticidade.`,
+        contents: `O usuário completou: "${taskText}". Gere um feedback curto sobre reforço positivo e neuroplasticidade.`,
         config: {
+          systemInstruction: SYSTEM_INSTRUCTION,
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
@@ -116,7 +131,7 @@ export const geminiService = {
       return result.boost;
     } catch (error: any) {
       console.error("Erro ao gerar boost:", error);
-      return "Ótimo trabalho! Seu cérebro está criando novos caminhos de sucesso.";
+      return "Vitória neural registrada! Seu córtex pré-frontal está ficando mais forte.";
     }
   }
 };
