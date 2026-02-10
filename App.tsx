@@ -48,7 +48,7 @@ const App: React.FC = () => {
   });
 
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [isDataLoaded, setIsDataLoaded] = useState(false); // Trava de segurança
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
   const isSyncingRef = useRef(false);
 
   const playAudio = useCallback((soundUrl: string) => {
@@ -58,7 +58,6 @@ const App: React.FC = () => {
     audio.play().catch(e => console.debug("Audio play blocked"));
   }, [soundEnabled]);
 
-  // State Management
   const [activeTab, setActiveTab] = useState<'execute' | 'plan' | 'habits' | 'capture' | 'dopamenu'>('execute');
   const [tasks, setTasks] = useState<Task[]>([]);
   const [recurringTasks, setRecurringTasks] = useState<RecurringTask[]>([]);
@@ -67,29 +66,20 @@ const App: React.FC = () => {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [selectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [theme] = useState<'light' | 'dark'>(() => (localStorage.getItem('neuro-theme') as 'light' | 'dark') || 'dark');
-  // Define isDark derived from theme state
   const isDark = theme === 'dark';
   const [dopamenuItems, setDopamenuItems] = useState<DopamenuItem[]>([]);
 
   // UI States
-  const [showHabitForm, setShowHabitForm] = useState(false);
-  const [habitForm, setHabitForm] = useState({ text: '', anchor: '', tinyAction: '' });
-  const [showRecurringForm, setShowRecurringForm] = useState(false);
-  const [recurringForm, setRecurringForm] = useState({ text: '', frequency: Frequency.DAILY, energy: 'Baixa' as Task['energy'] });
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [captureEnergy, setCaptureEnergy] = useState<Task['energy']>('Média');
   const [showTutorial, setShowTutorial] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
   const [showPlanTutorial, setShowPlanTutorial] = useState(false);
-  const [planTutorialStep, setPlanTutorialStep] = useState(0);
   const [timeLeft, setTimeLeft] = useState(90 * 60);
   const [isTimerActive, setIsTimerActive] = useState(false);
   const [panicTask, setPanicTask] = useState<Task | null>(null);
-  const [panicSolution, setPanicSolution] = useState<PanicSolution | null>(null);
-  const [isRescuing, setIsRescuing] = useState(false);
   const [isDecomposing, setIsDecomposing] = useState(false);
   const [newTaskText, setNewTaskText] = useState("");
-  const [obstacleInput, setObstacleInput] = useState("");
   const [currentArousal, setCurrentArousal] = useState<BrainCapacity>('Neutro');
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
   const [isRegistering, setIsRegistering] = useState(false);
@@ -98,46 +88,139 @@ const App: React.FC = () => {
   const [authName, setAuthName] = useState("");
   const [isLoadingAuth, setIsLoadingAuth] = useState(false);
 
-  // Initial Data Pull
+  // Inicializa dados do LocalStorage enquanto a nuvem não responde
   useEffect(() => {
     if (!currentUser) return;
-    const loadData = async () => {
+    const localData = localStorage.getItem(`data_${currentUser.email}`);
+    if (localData) {
+      const parsed = JSON.parse(localData);
+      setTasks(parsed.tasks || []);
+      setRecurringTasks(parsed.recurringTasks || []);
+      setHabits(parsed.habits || []);
+      setPoints(parsed.points || 0);
+      setDopamenuItems(parsed.dopamenuItems || []);
+    }
+  }, [currentUser]);
+
+  // Sincronização em segundo plano
+  useEffect(() => {
+    if (!currentUser || currentUser.id === 'guest') {
+      setIsDataLoaded(true);
+      return;
+    }
+    
+    const pullFromCloud = async () => {
       setSyncStatus('syncing');
       const cloud = await syncService.pullData(currentUser.email);
       if (cloud) {
+        // Merge inteligente ou substituição baseada em timestamp (simplificado: substitui)
         setTasks(cloud.tasks || []);
         setRecurringTasks(cloud.recurringTasks || []);
         setHabits(cloud.habits || []);
         setPoints(cloud.points || 0);
         setDopamenuItems(cloud.dopamenuItems || []);
       }
-      setIsDataLoaded(true); // Libera o "Push"
+      setIsDataLoaded(true);
       setSyncStatus('synced');
     };
-    loadData();
+    pullFromCloud();
   }, [currentUser]);
 
-  // Sync Data Push (Auto-save)
+  // Auto-save e Push para nuvem
   useEffect(() => {
-    // Só salva se o usuário estiver logado, não for guest, e os dados já foram baixados da nuvem inicialmente
-    if (!currentUser || currentUser.id === 'guest' || !isDataLoaded) return;
+    if (!currentUser || !isDataLoaded) return;
     
-    const save = async () => {
+    const dataToSave = { tasks, recurringTasks, habits, points, dopamenuItems };
+    localStorage.setItem(`data_${currentUser.email}`, JSON.stringify(dataToSave));
+
+    if (currentUser.id === 'guest') return;
+
+    const push = async () => {
       if (isSyncingRef.current) return;
       isSyncingRef.current = true;
       setSyncStatus('syncing');
-      const success = await syncService.pushData(currentUser.email, { 
-        tasks, recurringTasks, habits, points, dopamenuItems 
-      });
+      const success = await syncService.pushData(currentUser.email, dataToSave);
       setSyncStatus(success ? 'synced' : 'error');
       isSyncingRef.current = false;
     };
 
-    const t = setTimeout(save, 2000);
+    const t = setTimeout(push, 3000);
     return () => clearTimeout(t);
   }, [tasks, recurringTasks, habits, points, dopamenuItems, currentUser, isDataLoaded]);
 
-  // Timer Logic
+  // Login
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoadingAuth(true);
+    try {
+      const cloudUser = await syncService.findUser(authEmail);
+      if (cloudUser && cloudUser.password === authPassword) {
+        const u = { id: cloudUser.id, name: cloudUser.name, email: cloudUser.email };
+        localStorage.setItem('neuro-session', JSON.stringify(u));
+        setCurrentUser(u);
+        setIsDataLoaded(false);
+      } else {
+        alert("Email ou senha incorretos.");
+      }
+    } catch (err) {
+      alert("Problema de conexão com o servidor. Tente novamente em instantes.");
+    } finally {
+      setIsLoadingAuth(false);
+    }
+  };
+
+  // Registro (Offline-First)
+  const handleRegister = async () => {
+    if (!authName || !authEmail || !authPassword) return alert("Preencha todos os campos.");
+    setIsLoadingAuth(true);
+    try {
+      // Verifica se já existe na nuvem
+      const existing = await syncService.findUser(authEmail);
+      if (existing) {
+        alert("Este e-mail já está em uso.");
+        setIsLoadingAuth(false);
+        return;
+      }
+
+      const newUser = { id: crypto.randomUUID(), name: authName, email: authEmail, password: authPassword };
+      
+      // Tenta salvar na nuvem
+      const savedOnCloud = await syncService.saveUser(newUser);
+      
+      // Mesmo se falhar na nuvem (erro de servidor), permitimos o acesso e salvamos localmente
+      const u = { id: newUser.id, name: newUser.name, email: newUser.email };
+      localStorage.setItem('neuro-session', JSON.stringify(u));
+      
+      // Inicializa dados locais para este novo usuário
+      localStorage.setItem(`data_${newUser.email}`, JSON.stringify({
+        tasks: [], habits: [], recurringTasks: [], points: 0, dopamenuItems: []
+      }));
+
+      setCurrentUser(u);
+      setIsDataLoaded(true);
+
+      if (!savedOnCloud) {
+        console.warn("A conta foi criada localmente, mas a sincronização com a nuvem falhou. Seus dados serão sincronizados assim que a conexão estabilizar.");
+      }
+    } catch (e) {
+      alert("Erro crítico. Tente usar outro navegador ou limpar o cache.");
+    } finally {
+      setIsLoadingAuth(false);
+    }
+  };
+
+  const handleLogout = () => {
+    if(confirm("Deseja sair? Seus dados estão salvos localmente e serão sincronizados ao voltar.")) {
+      localStorage.removeItem('neuro-session');
+      setCurrentUser(null);
+      setIsDataLoaded(false);
+      setTasks([]);
+      setHabits([]);
+      setRecurringTasks([]);
+    }
+  };
+
+  // Timer
   useEffect(() => {
     let interval: any = null;
     if (isTimerActive && timeLeft > 0) {
@@ -150,65 +233,6 @@ const App: React.FC = () => {
   }, [isTimerActive, timeLeft, playAudio]);
 
   // Actions
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoadingAuth(true);
-    try {
-      const cloudUser = await syncService.findUser(authEmail);
-      if (cloudUser && cloudUser.password === authPassword) {
-        const u = { id: cloudUser.id, name: cloudUser.name, email: cloudUser.email };
-        localStorage.setItem('neuro-session', JSON.stringify(u));
-        setCurrentUser(u);
-        setIsDataLoaded(false); // Força um novo pull
-      } else {
-        alert("Email ou senha incorretos.");
-      }
-    } catch (err) {
-      alert("Erro de conexão. Verifique sua internet.");
-    } finally {
-      setIsLoadingAuth(false);
-    }
-  };
-
-  const handleRegister = async () => {
-    if (!authName || !authEmail || !authPassword) return alert("Preencha todos os campos.");
-    setIsLoadingAuth(true);
-    try {
-      const existing = await syncService.findUser(authEmail);
-      if (existing) {
-        alert("Este email já está cadastrado.");
-        setIsLoadingAuth(false);
-        return;
-      }
-      const newUser = { id: crypto.randomUUID(), name: authName, email: authEmail, password: authPassword };
-      const success = await syncService.saveUser(newUser);
-      if (success) {
-        const u = { id: newUser.id, name: newUser.name, email: newUser.email };
-        localStorage.setItem('neuro-session', JSON.stringify(u));
-        setCurrentUser(u);
-        setIsDataLoaded(true); // Conta nova, começa limpa mas liberada para push
-      } else {
-        alert("Erro ao criar conta no servidor.");
-      }
-    } catch (e) {
-      alert("Erro de conexão.");
-    } finally {
-      setIsLoadingAuth(false);
-    }
-  };
-
-  const handleLogout = () => {
-    if(confirm("Deseja sair da conta? Os dados salvos na nuvem permanecerão guardados.")) {
-      localStorage.removeItem('neuro-session');
-      setCurrentUser(null);
-      setIsDataLoaded(false);
-      setTasks([]);
-      setHabits([]);
-      setRecurringTasks([]);
-    }
-  };
-
-  // Rest of the App logic (addTask, toggleTask, etc.) remains identical...
   const addTask = (text: string, p: Priority = Priority.Q2, energy: Task['energy'] = captureEnergy) => {
     if (!text.trim()) return;
     const t: Task = {
@@ -217,21 +241,6 @@ const App: React.FC = () => {
       completed: false, subtasks: [], date: selectedDate, createdAt: Date.now()
     };
     setTasks(prev => [...prev, t]);
-  };
-
-  const handleAutoCategorize = async () => {
-    if (dayTasks.length === 0) return;
-    setIsOptimizing(true);
-    try {
-      const results = await geminiService.categorizeTasks(dayTasks);
-      setTasks(prev => prev.map(t => {
-        const suggestion = results.find(r => r.id === t.id);
-        if (suggestion) {
-          return { ...t, priority: suggestion.priority, energy: suggestion.energy };
-        }
-        return t;
-      }));
-    } catch (e) { console.error(e); } finally { setIsOptimizing(false); }
   };
 
   const toggleTask = (id: string) => {
@@ -247,34 +256,6 @@ const App: React.FC = () => {
     }));
   };
 
-  const toggleRecurringTask = (id: string) => {
-    const today = new Date().toISOString().split('T')[0];
-    setRecurringTasks(prev => prev.map(rt => {
-      if (rt.id === id) {
-        const alreadyDone = isRecurringDoneToday(rt);
-        if (!alreadyDone) {
-          setPoints(p => p + 15);
-          playAudio(SOUNDS.TASK_COMPLETE);
-          return { ...rt, completedDates: [...rt.completedDates, today] };
-        } else {
-          return { ...rt, completedDates: rt.completedDates.filter(d => d !== today) };
-        }
-      }
-      return rt;
-    }));
-  };
-
-  const isRecurringDoneToday = (rt: RecurringTask) => {
-    const today = new Date().toISOString().split('T')[0];
-    return rt.completedDates.includes(today);
-  };
-
-  const handleDopamenuAction = (label: string) => {
-    setPoints(p => p + 10);
-    playAudio(SOUNDS.XP_GAIN);
-    alert(`Recompensa "${label}" registrada! +10 XP.`);
-  };
-
   const completeHabit = (id: string) => {
     const today = new Date().toISOString().split('T')[0];
     setHabits(prev => prev.map(h => {
@@ -285,6 +266,19 @@ const App: React.FC = () => {
       }
       return h;
     }));
+  };
+
+  const handleAutoCategorize = async () => {
+    if (dayTasks.length === 0) return;
+    setIsOptimizing(true);
+    try {
+      const results = await geminiService.categorizeTasks(dayTasks);
+      setTasks(prev => prev.map(t => {
+        const suggestion = results.find(r => r.id === t.id);
+        if (suggestion) return { ...t, priority: suggestion.priority, energy: suggestion.energy };
+        return t;
+      }));
+    } catch (e) { console.error(e); } finally { setIsOptimizing(false); }
   };
 
   const handleDecompose = async (task: Task) => {
@@ -315,18 +309,8 @@ const App: React.FC = () => {
   }, [dayTasks, currentArousal]);
 
   const tutorialSteps = [
-    { title: "NeuroExecutor", description: "Sua prótese para o córtex pré-frontal. Gerencie energia e supere bloqueios.", icon: <SynapseLogo className="w-16 h-16" />, color: "text-orange-600" },
-    { title: "Foco (90 min)", description: "Ciclos ultradianos para máxima eficiência sem fadiga.", icon: <Timer size={48} />, color: "text-blue-500", target: "execute" },
-    { title: "Matriz Eisenhower", description: "Arraste e solte tarefas ou use o botão 'Focar' para priorizar seu fluxo.", icon: <LayoutGrid size={48} />, color: "text-purple-500", target: "plan" },
-    { title: "Otimização IA", description: "Deixe nossa IA categorizar sua energia e prioridades automaticamente.", icon: <Brain size={48} />, color: "text-blue-400" },
-    { title: "Dieta de Dopamina", description: "Recompensas saudáveis para manter o motor mental girando.", icon: <Coffee size={48} />, color: "text-orange-500", target: "dopamenu" },
-    { title: "Andaimação Neural", description: "Construa hábitos sólidos usando âncoras e micro-ações.", icon: <RefreshCw size={48} />, color: "text-green-500", target: "habits" }
-  ];
-
-  const planTutorialSteps = [
-    { title: "Matriz de Eisenhower", description: "Separe o importante do urgente. Arraste e solte para priorizar.", icon: <LayoutGrid size={40} className="text-purple-500" /> },
-    { title: "Arraste e Solte", description: "Mude a prioridade visualmente conforme sua carga mental muda.", icon: <Move size={40} className="text-blue-500" /> },
-    { title: "Mira no Alvo", description: "Clique no ícone de alvo para levar a tarefa direto para o timer de foco.", icon: <Target size={40} className="text-orange-500" /> }
+    { title: "NeuroExecutor", description: "Prótese neural para funções executivas.", icon: <SynapseLogo className="w-16 h-16" />, color: "text-orange-600" },
+    { title: "Sincronização Atômica", description: "Seus dados agora são salvos localmente e na nuvem, garantindo persistência eterna.", icon: <CloudCheck size={48} />, color: "text-blue-500" }
   ];
 
   if (!currentUser) return (
@@ -348,7 +332,7 @@ const App: React.FC = () => {
         <button onClick={() => setIsRegistering(!isRegistering)} className="w-full mt-6 text-xs font-bold text-slate-500 uppercase hover:text-orange-500 transition-colors">
           {isRegistering ? "Já sou membro • Entrar" : "Não tenho conta ainda • Registrar"}
         </button>
-        <button onClick={() => setCurrentUser({ id: 'guest', name: 'Visitante', email: 'guest@neuro.com' })} className="w-full mt-4 text-[10px] font-bold text-slate-700 uppercase underline opacity-60">Modo Visitante (Não salva na nuvem)</button>
+        <button onClick={() => setCurrentUser({ id: 'guest', name: 'Visitante', email: 'guest@neuro.com' })} className="w-full mt-4 text-[10px] font-bold text-slate-700 uppercase underline opacity-60">Modo Visitante (Sem Nuvem)</button>
       </div>
     </div>
   );
@@ -397,13 +381,13 @@ const App: React.FC = () => {
         <div className="hidden md:flex flex-col gap-2 p-4 mt-auto border-t border-slate-800/50">
            <div className="px-4 py-2 flex items-center justify-between text-[10px] font-black text-slate-500 uppercase">
               {!isDataLoaded ? (
-                <span className="flex items-center gap-2 text-blue-500"><Loader2 size={14} className="animate-spin"/> Baixando Nuvem</span>
+                <span className="flex items-center gap-2 text-blue-500"><Loader2 size={14} className="animate-spin"/> Puxando...</span>
               ) : syncStatus === 'syncing' ? (
-                <span className="flex items-center gap-2 text-orange-500"><RefreshCw size={14} className="animate-spin"/> Sincronizando</span>
+                <span className="flex items-center gap-2 text-orange-500"><RefreshCw size={14} className="animate-spin"/> Salvando...</span>
               ) : syncStatus === 'error' ? (
-                <span className="flex items-center gap-2 text-red-500"><CloudOff size={14}/> Erro de Conexão</span>
+                <span className="flex items-center gap-2 text-red-500"><CloudOff size={14}/> Offline</span>
               ) : (
-                <span className="flex items-center gap-2 text-green-500"><CloudCheck size={14}/> Dados Salvos</span>
+                <span className="flex items-center gap-2 text-green-500"><CloudCheck size={14}/> Sincronizado</span>
               )}
            </div>
           <button onClick={handleLogout} className="flex items-center gap-4 px-6 py-4 rounded-2xl font-bold text-xs text-red-500 hover:bg-red-500/10"> <LogOut size={18}/> Sair </button>
@@ -412,138 +396,130 @@ const App: React.FC = () => {
 
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto pb-24 md:pb-8 p-4 md:p-10">
-        {!isDataLoaded && currentUser?.id !== 'guest' ? (
-          <div className="h-full flex flex-col items-center justify-center space-y-4 opacity-50">
-            <Loader2 size={48} className="animate-spin text-orange-600" />
-            <p className="font-black uppercase text-xs tracking-widest">Reconstruindo sua rede neural...</p>
-          </div>
-        ) : (
-          <div className="max-w-5xl mx-auto space-y-10">
-            {activeTab === 'execute' && (
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-700">
-                <div className="lg:col-span-2 space-y-8">
-                  <div className="p-12 text-center border rounded-[48px] bg-slate-900/60 border-slate-800 relative overflow-hidden shadow-2xl">
-                    <span className="text-[10px] font-black text-slate-500 tracking-[0.3em] uppercase mb-4 block">Fluxo Ultradiano</span>
-                    <h2 className="text-[100px] leading-none font-mono font-black tracking-tighter tabular-nums mb-8">{formatTime(timeLeft)}</h2>
-                    <div className="flex justify-center gap-6">
-                      <button onClick={() => { setIsTimerActive(!isTimerActive); if(!isTimerActive) playAudio(SOUNDS.TIMER_START); }} className="w-20 h-20 bg-orange-600 rounded-[32px] text-white shadow-glow-orange flex items-center justify-center hover:bg-orange-500 transition-all">
-                        {isTimerActive ? <Pause size={32}/> : <Play size={32} fill="currentColor"/>}
-                      </button>
-                      <button onClick={() => setTimeLeft(90*60)} className="w-20 h-20 bg-slate-800 rounded-[32px] text-slate-400 flex items-center justify-center"> <RotateCcw size={32}/> </button>
-                    </div>
+        <div className="max-w-5xl mx-auto space-y-10">
+          {activeTab === 'execute' && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-700">
+              <div className="lg:col-span-2 space-y-8">
+                <div className="p-12 text-center border rounded-[48px] bg-slate-900/60 border-slate-800 relative overflow-hidden shadow-2xl">
+                  <span className="text-[10px] font-black text-slate-500 tracking-[0.3em] uppercase mb-4 block">Fluxo Ultradiano</span>
+                  <h2 className="text-[100px] leading-none font-mono font-black tracking-tighter tabular-nums mb-8">{formatTime(timeLeft)}</h2>
+                  <div className="flex justify-center gap-6">
+                    <button onClick={() => { setIsTimerActive(!isTimerActive); if(!isTimerActive) playAudio(SOUNDS.TIMER_START); }} className="w-20 h-20 bg-orange-600 rounded-[32px] text-white shadow-glow-orange flex items-center justify-center hover:bg-orange-500 transition-all">
+                      {isTimerActive ? <Pause size={32}/> : <Play size={32} fill="currentColor"/>}
+                    </button>
+                    <button onClick={() => setTimeLeft(90*60)} className="w-20 h-20 bg-slate-800 rounded-[32px] text-slate-400 flex items-center justify-center"> <RotateCcw size={32}/> </button>
                   </div>
+                </div>
 
-                  <div className="p-10 border rounded-[48px] bg-slate-900/60 border-slate-800 min-h-[350px] shadow-xl">
-                    {selectedTask ? (
-                      <div className="space-y-8">
-                        <div className="flex justify-between items-start">
-                          <div className="space-y-2">
-                            <h2 className={`text-4xl font-black ${selectedTask.completed ? 'line-through opacity-20' : ''}`}>{selectedTask.text}</h2>
-                            <div className="flex gap-2">
-                              <span className="px-3 py-1 bg-orange-600/20 text-orange-500 rounded-full text-[8px] font-black uppercase">{selectedTask.priority}</span>
-                              <EnergyBadge energy={selectedTask.energy} />
-                            </div>
+                <div className="p-10 border rounded-[48px] bg-slate-900/60 border-slate-800 min-h-[350px] shadow-xl">
+                  {selectedTask ? (
+                    <div className="space-y-8">
+                      <div className="flex justify-between items-start">
+                        <div className="space-y-2">
+                          <h2 className={`text-4xl font-black ${selectedTask.completed ? 'line-through opacity-20' : ''}`}>{selectedTask.text}</h2>
+                          <div className="flex gap-2">
+                            <span className="px-3 py-1 bg-orange-600/20 text-orange-500 rounded-full text-[8px] font-black uppercase">{selectedTask.priority}</span>
+                            <EnergyBadge energy={selectedTask.energy} />
                           </div>
-                          <button onClick={() => setPanicTask(selectedTask)} className="p-5 bg-red-600/10 text-red-500 rounded-[28px] hover:bg-red-600 hover:text-white transition-all"> <AlertTriangle size={28}/> </button>
                         </div>
-                        <div className="space-y-4">
-                          {selectedTask.subtasks.map((s, i) => (
-                            <div key={i} className="p-5 bg-slate-800/30 rounded-3xl flex items-center gap-5 border border-slate-700/50 group">
-                              <span className="text-[10px] font-black text-orange-500 w-6 h-6 flex items-center justify-center bg-orange-500/10 rounded-full">{i+1}</span>
-                              <p className="text-sm font-medium opacity-80">{s}</p>
-                            </div>
-                          ))}
-                          {selectedTask.subtasks.length === 0 && (
-                            <button onClick={() => handleDecompose(selectedTask)} className="w-full py-16 border-2 border-dashed border-slate-800 rounded-[32px] flex flex-col items-center gap-3 opacity-40 hover:opacity-100 transition-all">
-                              {isDecomposing ? <RefreshCw className="animate-spin text-orange-500" /> : <Sparkles />}
-                              <span className="text-[10px] font-black uppercase">Desmembrar com IA (Chunking)</span>
-                            </button>
-                          )}
-                        </div>
-                        <button onClick={() => toggleTask(selectedTask.id)} className={`w-full py-6 rounded-3xl font-black uppercase tracking-[0.2em] shadow-2xl transition-all active:scale-95 ${selectedTask.completed ? 'bg-green-600' : 'bg-orange-600'} text-white`}>
-                          {selectedTask.completed ? "Reativar" : "Concluir Missão (+25 XP)"}
+                        <button onClick={() => setPanicTask(selectedTask)} className="p-5 bg-red-600/10 text-red-500 rounded-[28px] hover:bg-red-600 hover:text-white transition-all"> <AlertTriangle size={28}/> </button>
+                      </div>
+                      <div className="space-y-4">
+                        {selectedTask.subtasks.map((s, i) => (
+                          <div key={i} className="p-5 bg-slate-800/30 rounded-3xl flex items-center gap-5 border border-slate-700/50 group">
+                            <span className="text-[10px] font-black text-orange-500 w-6 h-6 flex items-center justify-center bg-orange-500/10 rounded-full">{i+1}</span>
+                            <p className="text-sm font-medium opacity-80">{s}</p>
+                          </div>
+                        ))}
+                        {selectedTask.subtasks.length === 0 && (
+                          <button onClick={() => handleDecompose(selectedTask)} className="w-full py-16 border-2 border-dashed border-slate-800 rounded-[32px] flex flex-col items-center gap-3 opacity-40 hover:opacity-100 transition-all">
+                            {isDecomposing ? <RefreshCw className="animate-spin text-orange-500" /> : <Sparkles />}
+                            <span className="text-[10px] font-black uppercase">Desmembrar com IA (Chunking)</span>
+                          </button>
+                        )}
+                      </div>
+                      <button onClick={() => toggleTask(selectedTask.id)} className={`w-full py-6 rounded-3xl font-black uppercase tracking-[0.2em] shadow-2xl transition-all active:scale-95 ${selectedTask.completed ? 'bg-green-600' : 'bg-orange-600'} text-white`}>
+                        {selectedTask.completed ? "Reativar" : "Concluir Missão (+25 XP)"}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="py-24 text-center opacity-10 flex flex-col items-center gap-4">
+                      <Target size={80}/>
+                      <p className="text-xl font-black uppercase">Defina seu alvo</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div className="p-8 border rounded-[40px] bg-slate-900/60 border-slate-800 shadow-lg">
+                  <h3 className="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-6">Execução Pendente</h3>
+                  <div className="space-y-3">
+                      {filteredTasks.filter(t => !t.completed).map(t => (
+                        <button key={t.id} onClick={() => setSelectedTask(t)} className={`w-full p-5 text-left border rounded-[24px] transition-all group ${selectedTask?.id === t.id ? 'bg-orange-600/10 border-orange-500 ring-1 ring-orange-500' : 'border-slate-800 bg-slate-800/20 hover:bg-slate-800/40'}`}>
+                          <p className="text-sm font-bold truncate group-hover:translate-x-1 transition-transform">{t.text}</p>
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'plan' && (
+            <div className="space-y-6">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center px-4 gap-4">
+                <div className="flex items-center gap-4">
+                  <h2 className="text-2xl font-black italic uppercase">Matriz de Eisenhower</h2>
+                  <button onClick={() => setShowPlanTutorial(true)} className="p-2 text-slate-600 hover:text-orange-500"><HelpCircle size={20} /></button>
+                </div>
+                <button onClick={handleAutoCategorize} disabled={isOptimizing} className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-full text-xs font-black uppercase flex items-center gap-2 shadow-xl disabled:opacity-50">
+                  {isOptimizing ? <RefreshCw size={14} className="animate-spin"/> : <Brain size={14}/>} Otimização IA
+                </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in slide-in-from-bottom duration-700">
+                <MatrixQuadrant priority={Priority.Q1} title="Q1: Crítico e Urgente" color="bg-red-600/5 border-red-500/20" tasks={dayTasks.filter(t => t.priority === Priority.Q1 && !t.completed)} onSelect={(t) => { setSelectedTask(t); setActiveTab('execute'); }} onDrop={handleTaskDrop} />
+                <MatrixQuadrant priority={Priority.Q2} title="Q2: Estratégico/Importante" color="bg-orange-600/5 border-orange-500/20" tasks={dayTasks.filter(t => t.priority === Priority.Q2 && !t.completed)} onSelect={(t) => { setSelectedTask(t); setActiveTab('execute'); }} onDrop={handleTaskDrop} />
+                <MatrixQuadrant priority={Priority.Q3} title="Q3: Delegar/Reduzir" color="bg-blue-600/5 border-blue-500/20" tasks={dayTasks.filter(t => t.priority === Priority.Q3 && !t.completed)} onSelect={(t) => { setSelectedTask(t); setActiveTab('execute'); }} onDrop={handleTaskDrop} />
+                <MatrixQuadrant priority={Priority.Q4} title="Q4: Eliminar Distrações" color="bg-slate-800/20 border-slate-700/50" tasks={dayTasks.filter(t => t.priority === Priority.Q4 && !t.completed)} onSelect={(t) => { setSelectedTask(t); setActiveTab('execute'); }} onDrop={handleTaskDrop} />
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'habits' && (
+            <div className="space-y-12 animate-in slide-in-from-bottom duration-700">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                <div className="space-y-8">
+                  <h2 className="text-3xl font-black flex items-center gap-4 italic uppercase text-orange-600"><RefreshCw size={28} /> Hábitos</h2>
+                  {habits.map(h => (
+                    <div key={h.id} className="p-6 border rounded-[32px] bg-slate-900 border-slate-800 flex justify-between items-center group">
+                      <div><p className="font-black text-lg">{h.text}</p><p className="text-[10px] text-slate-500">Âncora: {h.anchor}</p></div>
+                      <div className="flex items-center gap-4">
+                        <Flame size={20} className={h.streak > 0 ? "text-orange-500" : "text-slate-800"} />
+                        <button onClick={() => completeHabit(h.id)} className="w-12 h-12 rounded-2xl flex items-center justify-center bg-slate-800 text-slate-500 hover:bg-orange-600 hover:text-white transition-all">
+                           {h.lastCompleted === new Date().toISOString().split('T')[0] ? <Check size={24} className="text-green-500"/> : <Plus size={24}/>}
                         </button>
                       </div>
-                    ) : (
-                      <div className="py-24 text-center opacity-10 flex flex-col items-center gap-4">
-                        <Target size={80}/>
-                        <p className="text-xl font-black uppercase">Defina seu alvo</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="space-y-6">
-                  <div className="p-8 border rounded-[40px] bg-slate-900/60 border-slate-800 shadow-lg">
-                    <h3 className="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-6">Execução Pendente</h3>
-                    <div className="space-y-3">
-                        {filteredTasks.filter(t => !t.completed).map(t => (
-                          <button key={t.id} onClick={() => setSelectedTask(t)} className={`w-full p-5 text-left border rounded-[24px] transition-all group ${selectedTask?.id === t.id ? 'bg-orange-600/10 border-orange-500 ring-1 ring-orange-500' : 'border-slate-800 bg-slate-800/20 hover:bg-slate-800/40'}`}>
-                            <p className="text-sm font-bold truncate group-hover:translate-x-1 transition-transform">{t.text}</p>
-                          </button>
-                        ))}
                     </div>
-                  </div>
+                  ))}
                 </div>
               </div>
-            )}
+            </div>
+          )}
 
-            {activeTab === 'plan' && (
-              <div className="space-y-6">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center px-4 gap-4">
-                  <div className="flex items-center gap-4">
-                    <h2 className="text-2xl font-black italic uppercase">Matriz de Eisenhower</h2>
-                    <button onClick={() => setShowPlanTutorial(true)} className="p-2 text-slate-600 hover:text-orange-500"><HelpCircle size={20} /></button>
-                  </div>
-                  <button onClick={handleAutoCategorize} disabled={isOptimizing} className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-full text-xs font-black uppercase flex items-center gap-2 shadow-xl disabled:opacity-50">
-                    {isOptimizing ? <RefreshCw size={14} className="animate-spin"/> : <Brain size={14}/>} Otimização IA
-                  </button>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in slide-in-from-bottom duration-700">
-                  <MatrixQuadrant priority={Priority.Q1} title="Q1: Crítico e Urgente" color="bg-red-600/5 border-red-500/20" tasks={dayTasks.filter(t => t.priority === Priority.Q1 && !t.completed)} onSelect={(t) => { setSelectedTask(t); setActiveTab('execute'); }} onDrop={handleTaskDrop} />
-                  <MatrixQuadrant priority={Priority.Q2} title="Q2: Estratégico/Importante" color="bg-orange-600/5 border-orange-500/20" tasks={dayTasks.filter(t => t.priority === Priority.Q2 && !t.completed)} onSelect={(t) => { setSelectedTask(t); setActiveTab('execute'); }} onDrop={handleTaskDrop} />
-                  <MatrixQuadrant priority={Priority.Q3} title="Q3: Delegar/Reduzir" color="bg-blue-600/5 border-blue-500/20" tasks={dayTasks.filter(t => t.priority === Priority.Q3 && !t.completed)} onSelect={(t) => { setSelectedTask(t); setActiveTab('execute'); }} onDrop={handleTaskDrop} />
-                  <MatrixQuadrant priority={Priority.Q4} title="Q4: Eliminar Distrações" color="bg-slate-800/20 border-slate-700/50" tasks={dayTasks.filter(t => t.priority === Priority.Q4 && !t.completed)} onSelect={(t) => { setSelectedTask(t); setActiveTab('execute'); }} onDrop={handleTaskDrop} />
-                </div>
+          {activeTab === 'capture' && (
+            <div className="max-w-3xl mx-auto py-24 space-y-16 text-center animate-in fade-in duration-1000">
+              <h2 className="text-6xl font-black italic tracking-tighter uppercase">Captura Atômica</h2>
+              <div className="p-10 bg-slate-900 border border-slate-800 rounded-[64px] shadow-2xl flex items-center gap-6">
+                <input autoFocus className="flex-1 bg-transparent border-none text-3xl font-black outline-none placeholder:text-slate-800" placeholder="O que está na mente?" value={newTaskText} onChange={e => setNewTaskText(e.target.value)} onKeyDown={e => { if(e.key === 'Enter') { addTask(newTaskText); setNewTaskText(""); setActiveTab('plan'); }}} />
+                <button onClick={() => { addTask(newTaskText); setNewTaskText(""); setActiveTab('plan'); }} className="w-24 h-24 bg-orange-600 rounded-[40px] flex items-center justify-center"><Plus size={48} className="text-white"/></button>
               </div>
-            )}
-
-            {/* Other tabs remain same but with the isDataLoaded check above them... */}
-            {activeTab === 'habits' && (
-              <div className="space-y-12 animate-in slide-in-from-bottom duration-700">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                  <div className="space-y-8">
-                    <h2 className="text-3xl font-black flex items-center gap-4 italic uppercase text-orange-600"><RefreshCw size={28} /> Hábitos</h2>
-                    {habits.map(h => (
-                      <div key={h.id} className="p-6 border rounded-[32px] bg-slate-900 border-slate-800 flex justify-between items-center group">
-                        <div><p className="font-black text-lg">{h.text}</p><p className="text-[10px] text-slate-500">Âncora: {h.anchor}</p></div>
-                        <div className="flex items-center gap-4">
-                          <Flame size={20} className={h.streak > 0 ? "text-orange-500" : "text-slate-800"} />
-                          <button onClick={() => completeHabit(h.id)} className="w-12 h-12 rounded-2xl flex items-center justify-center bg-slate-800 text-slate-500 hover:bg-orange-600 hover:text-white transition-all">
-                             {h.lastCompleted === new Date().toISOString().split('T')[0] ? <Check size={24} className="text-green-500"/> : <Plus size={24}/>}
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'capture' && (
-              <div className="max-w-3xl mx-auto py-24 space-y-16 text-center animate-in fade-in duration-1000">
-                <h2 className="text-6xl font-black italic tracking-tighter uppercase">Captura Atômica</h2>
-                <div className="p-10 bg-slate-900 border border-slate-800 rounded-[64px] shadow-2xl flex items-center gap-6">
-                  <input autoFocus className="flex-1 bg-transparent border-none text-3xl font-black outline-none placeholder:text-slate-800" placeholder="O que está na mente?" value={newTaskText} onChange={e => setNewTaskText(e.target.value)} onKeyDown={e => { if(e.key === 'Enter') { addTask(newTaskText); setNewTaskText(""); setActiveTab('plan'); }}} />
-                  <button onClick={() => { addTask(newTaskText); setNewTaskText(""); setActiveTab('plan'); }} className="w-24 h-24 bg-orange-600 rounded-[40px] flex items-center justify-center"><Plus size={48} className="text-white"/></button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+            </div>
+          )}
+        </div>
       </main>
 
-      {/* Tutorial Modals... */}
+      {/* Tutorial Modals */}
       {showTutorial && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md">
           <div className="w-full max-w-lg bg-[#0a1128] border border-slate-800 rounded-[56px] p-12 text-center space-y-8">

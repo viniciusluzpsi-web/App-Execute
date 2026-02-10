@@ -1,21 +1,19 @@
 
 import { User, Task, Habit, RecurringTask } from "../types";
 
-// Bucket persistente. Usando um identificador mais robusto.
-const BUCKET_ID = "NeuroExecutor_V1_Cloud_Final_99";
+// Bucket ID renovado para evitar conflitos de cache ou limites
+const BUCKET_ID = "neuro_exec_storage_v2_stable";
 const BASE_URL = `https://kvdb.io/${BUCKET_ID}/`;
 
-async function hashString(str: string) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(str.toLowerCase().trim());
-  const hash = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+// Função de codificação simples e segura para URLs
+function encodeKey(str: string) {
+  return btoa(str.toLowerCase().trim()).replace(/[/+=]/g, '_');
 }
 
 export const syncService = {
   async saveUser(user: any) {
     try {
-      const key = await hashString(user.email);
+      const key = encodeKey(user.email);
       const payload = {
         id: user.id,
         name: user.name,
@@ -24,29 +22,37 @@ export const syncService = {
         createdAt: Date.now()
       };
       
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+
       const response = await fetch(`${BASE_URL}user_${key}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: controller.signal
       });
       
-      if (!response.ok) throw new Error("Falha ao salvar usuário na KV");
-      return true;
+      clearTimeout(timeout);
+      return response.ok;
     } catch (e) {
-      console.error("Erro Crítico no saveUser:", e);
+      console.warn("Erro ao salvar usuário na nuvem (usando modo offline):", e);
       return false;
     }
   },
 
   async findUser(email: string) {
     try {
-      const key = await hashString(email);
-      const res = await fetch(`${BASE_URL}user_${key}`);
+      const key = encodeKey(email);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+
+      const res = await fetch(`${BASE_URL}user_${key}`, { signal: controller.signal });
+      clearTimeout(timeout);
+      
       if (!res.ok) return null;
-      const data = await res.json();
-      return data;
+      return await res.json();
     } catch (e) {
-      console.error("Erro ao buscar usuário:", e);
+      console.error("Erro ao buscar usuário na nuvem:", e);
       return null;
     }
   },
@@ -54,7 +60,7 @@ export const syncService = {
   async pushData(email: string, data: any) {
     if (!email || email === 'guest@neuro.com') return false;
     try {
-      const key = await hashString(email);
+      const key = encodeKey(email);
       const response = await fetch(`${BASE_URL}data_${key}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -65,7 +71,6 @@ export const syncService = {
       });
       return response.ok;
     } catch (e) {
-      console.error("Erro no pushData:", e);
       return false;
     }
   },
@@ -73,13 +78,11 @@ export const syncService = {
   async pullData(email: string) {
     if (!email || email === 'guest@neuro.com') return null;
     try {
-      const key = await hashString(email);
+      const key = encodeKey(email);
       const res = await fetch(`${BASE_URL}data_${key}`);
       if (!res.ok) return null;
-      const data = await res.json();
-      return data;
+      return await res.json();
     } catch (e) {
-      console.error("Erro no pullData:", e);
       return null;
     }
   }
