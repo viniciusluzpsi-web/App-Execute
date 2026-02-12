@@ -21,7 +21,8 @@ export const geminiService = {
         Considere a complexidade inerente de cada texto: ${JSON.stringify(tasks.map(t => ({ id: t.id, text: t.text })))}`,
         config: {
           systemInstruction: SYSTEM_INSTRUCTION,
-          // Ativando o orçamento de pensamento para respostas mais analíticas
+          // Set both maxOutputTokens and thinkingBudget together as per guidelines
+          maxOutputTokens: 4000,
           thinkingConfig: { thinkingBudget: 2000 },
           responseMimeType: "application/json",
           responseSchema: {
@@ -54,7 +55,9 @@ export const geminiService = {
         O primeiro passo deve ser tão ridículo e fácil que é impossível não fazer (ex: 'abrir a tampa da caneta').`,
         config: {
           systemInstruction: SYSTEM_INSTRUCTION,
-          thinkingConfig: { thinkingBudget: 4000 }, // Mais pensamento para decomposição lógica
+          // Set both maxOutputTokens and thinkingBudget together as per guidelines
+          maxOutputTokens: 6000,
+          thinkingConfig: { thinkingBudget: 4000 }, 
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
@@ -85,7 +88,9 @@ export const geminiService = {
         Forneça um diagnóstico neuropsicológico e um protocolo de resgate imediato.`,
         config: {
           systemInstruction: SYSTEM_INSTRUCTION,
-          thinkingConfig: { thinkingBudget: 8000 }, // Orçamento alto para análise de crise
+          // Set both maxOutputTokens and thinkingBudget together as per guidelines
+          maxOutputTokens: 12000,
+          thinkingConfig: { thinkingBudget: 8000 }, 
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,

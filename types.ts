@@ -49,9 +49,11 @@ export interface Habit {
   tinyAction: string;
   streak: number;
   lastCompleted: string | null;
+  completedDates: string[]; // Adicionado para histórico semanal
 }
 
 export interface DopamenuItem {
+  id: string;
   category: 'Starter' | 'Main' | 'Side' | 'Dessert';
   label: string;
   description: string;
