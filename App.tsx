@@ -9,7 +9,7 @@ import {
   ChevronRight, Brain, Lightbulb, ZapOff, BarChart3,
   Coffee, Utensils, Waves, Users, Wind, Battery, BatteryLow, BatteryMedium, BatteryFull,
   Check, ArrowLeft, ArrowRight, GripVertical, Wand2, Calendar, HelpCircle, Volume2, VolumeX, Loader2,
-  Clock, CalendarRange, Binary, ShieldCheck, Palette, BookOpen, UtensilsCrossed
+  Clock, CalendarRange, Binary, ShieldCheck, Palette, BookOpen, UtensilsCrossed, GraduationCap, Microscope
 } from 'lucide-react';
 import { Priority, Task, Habit, IdentityBoost, PanicSolution, RecurringTask, Frequency, User, BrainCapacity, DopamenuItem } from './types';
 import { geminiService } from './services/geminiService';
@@ -49,22 +49,46 @@ interface DailyMission {
 
 const TUTORIAL_STEPS = [
   {
-    title: "Bem-vindo à sua Segunda Mente",
-    description: "O NeuroExecutor é um sistema de suporte às suas funções executivas, projetado para reduzir a paralisia de decisão e a fadiga mental. Vamos entender como ele funciona?",
+    title: "Neuroprodutividade",
+    theory: "O Córtex Pré-Frontal (CPF) é o CEO do cérebro, mas gasta energia excessiva em decisões triviais. Este app funciona como uma 'Prótese Cognitiva' para poupar seu CPF.",
+    description: "Bem-vindo ao NeuroExecutor. Vamos configurar sua segunda mente para que você pare de lutar contra sua própria biologia.",
     icon: <BrainCircuit className="w-16 h-16 text-orange-500" />,
     tab: null
   },
   {
-    title: "Sua Capacidade Neural",
-    description: "Antes de tudo: identifique como seu cérebro está agora no painel lateral. O sistema filtrará tarefas automaticamente para não sobrecarregar seu processamento.",
+    title: "Capacidade Neural",
+    theory: "Tentar fazer tarefas complexas em estado de fadiga gera cortisol (estresse). A neuroplasticidade ocorre melhor quando respeitamos nossos níveis de ativação (Arousal).",
+    description: "No painel lateral, selecione como você está agora. O sistema destacará apenas o que seu cérebro consegue processar no momento.",
     icon: <BatteryMedium className="w-16 h-16 text-orange-400" />,
     tab: 'execute'
   },
   {
-    title: "Dashboard de Consistência",
-    description: "Acompanhe sua evolução semanal. O cérebro adora ver padrões de sucesso; isso reforça sua nova identidade produtiva.",
-    icon: <TrendingUp className="w-16 h-16 text-orange-500" />,
-    tab: 'dashboard'
+    title: "Efeito Zeigarnik",
+    theory: "Tarefas incompletas 'rodam' em segundo plano, gerando ansiedade. O 'Brain Dump' libera a memória de trabalho do CPF.",
+    description: "Use a aba 'Captura' para descarregar o caos. Depois, na 'Matriz', arraste as tarefas para categorizar o que é realmente vital.",
+    icon: <ListTodo className="w-16 h-16 text-blue-500" />,
+    tab: 'capture'
+  },
+  {
+    title: "A Regra de 3",
+    theory: "Grandes listas paralisam. O cérebro processa informações em blocos (chunking). 3 missões diárias é o 'ponto doce' para o foco sustentado.",
+    description: "Na aba 'Focar', defina suas 3 missões. Use o Timebox clicando nos minutos para criar uma 'pressão positiva' e entrar em estado de flow.",
+    icon: <Target className="w-16 h-16 text-red-500" />,
+    tab: 'execute'
+  },
+  {
+    title: "Ciclo Ultradiano",
+    theory: "O foco não é linear. Trabalhamos em picos de ~90min. O timer ajuda você a respeitar o limite sináptico e pausar antes do burnout.",
+    description: "Ao iniciar uma missão, ative o timer. Quando acabar, é obrigatório buscar uma recompensa no seu Dopamenu.",
+    icon: <Timer className="w-16 h-16 text-orange-600" />,
+    tab: 'execute'
+  },
+  {
+    title: "Gânglios Basais",
+    theory: "Hábitos são automatizados nos gânglios basais, consumindo quase zero energia do CPF. Usar 'Âncoras' facilita essa transição neural.",
+    description: "Em 'Hábitos', use a técnica: 'Depois de [Âncora], eu vou [Ação]'. Isso cria um gatilho biológico instantâneo.",
+    icon: <RefreshCw className="w-16 h-16 text-purple-500" />,
+    tab: 'habits'
   }
 ];
 
@@ -137,6 +161,10 @@ const App: React.FC = () => {
   const [dopamenuItems, setDopamenuItems] = useState<DopamenuItem[]>(INITIAL_DOPAMENU);
   const [sparkleTaskId, setSparkleTaskId] = useState<string | null>(null);
   
+  // Feedback states for animations
+  const [justCompletedMissionId, setJustCompletedMissionId] = useState<number | null>(null);
+  const [justCompletedTaskId, setJustCompletedTaskId] = useState<string | null>(null);
+
   // Daily Missions State
   const [dailyMissions, setDailyMissions] = useState<DailyMission[]>([
     { id: 1, text: '', minutes: 30, completed: false },
@@ -159,7 +187,7 @@ const App: React.FC = () => {
 
   // Persistence Logic
   useEffect(() => {
-    const localData = localStorage.getItem('neuro_executor_data_v3');
+    const localData = localStorage.getItem('neuro_executor_data_v4');
     if (localData) {
       const parsed = JSON.parse(localData);
       setTasks(parsed.tasks || []);
@@ -170,7 +198,7 @@ const App: React.FC = () => {
       if (parsed.dailyMissions) setDailyMissions(parsed.dailyMissions);
     }
     setIsDataLoaded(true);
-    if (!localStorage.getItem('neuro-tutorial-seen')) {
+    if (!localStorage.getItem('neuro-tutorial-v4-seen')) {
       setTutorialStep(0);
     }
   }, []);
@@ -178,7 +206,7 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!isDataLoaded) return;
     const dataToSave = { tasks, recurringTasks, habits, points, dopamenuItems, dailyMissions };
-    localStorage.setItem('neuro_executor_data_v3', JSON.stringify(dataToSave));
+    localStorage.setItem('neuro_executor_data_v4', JSON.stringify(dataToSave));
   }, [tasks, recurringTasks, habits, points, dopamenuItems, dailyMissions, isDataLoaded]);
 
   // UI Flow States
@@ -229,6 +257,10 @@ const App: React.FC = () => {
     setShowHabitForm(false);
   };
 
+  const updateHabit = (id: string, updates: Partial<Habit>) => {
+    setHabits(prev => prev.map(h => h.id === id ? { ...h, ...updates } : h));
+  };
+
   const addRecurringTask = (e: React.FormEvent) => {
     e.preventDefault();
     if (!recurringForm.text) return;
@@ -257,6 +289,8 @@ const App: React.FC = () => {
         if (!t.completed) {
           setPoints(p => p + 25);
           playAudio(SOUNDS.TASK_COMPLETE);
+          setJustCompletedTaskId(id);
+          setTimeout(() => setJustCompletedTaskId(null), 1000);
         }
         return { ...t, completed: !t.completed };
       }
@@ -271,6 +305,16 @@ const App: React.FC = () => {
         return { ...t, energy: nextEnergy };
       }
       return t;
+    }));
+  };
+
+  const updateRecurringTaskEnergy = (id: string) => {
+    setRecurringTasks(prev => prev.map(rt => {
+      if (rt.id === id) {
+        const nextEnergy: Task['energy'] = rt.energy === 'Baixa' ? 'Média' : rt.energy === 'Média' ? 'Alta' : 'Baixa';
+        return { ...rt, energy: nextEnergy };
+      }
+      return rt;
     }));
   };
 
@@ -318,8 +362,10 @@ const App: React.FC = () => {
     setDailyMissions(prev => prev.map(m => {
       if (m.id === id) {
         if (updates.completed && !m.completed) {
-          setPoints(p => p + 100); // Grande recompensa para missão diária
+          setPoints(p => p + 100);
           playAudio(SOUNDS.TASK_COMPLETE);
+          setJustCompletedMissionId(id);
+          setTimeout(() => setJustCompletedMissionId(null), 1000);
         }
         return { ...m, ...updates };
       }
@@ -377,13 +423,13 @@ const App: React.FC = () => {
       setTutorialStep(nextStep);
     } else {
       setTutorialStep(null);
-      localStorage.setItem('neuro-tutorial-seen', 'true');
+      localStorage.setItem('neuro-tutorial-v4-seen', 'true');
     }
   };
 
   const skipTutorial = () => {
     setTutorialStep(null);
-    localStorage.setItem('neuro-tutorial-seen', 'true');
+    localStorage.setItem('neuro-tutorial-v4-seen', 'true');
   };
 
   // Metrics Logic
@@ -406,8 +452,8 @@ const App: React.FC = () => {
     ];
     return combined.filter(t => {
       if (currentArousal === 'Exausto') return t.energy === 'Baixa';
-      if (currentArousal === 'Hiperfocado') return true;
-      return t.energy !== 'Alta';
+      if (currentArousal === 'Neutro') return t.energy === 'Baixa' || t.energy === 'Média';
+      return true;
     });
   }, [dayTasks, recurringTasks, currentArousal]);
 
@@ -476,112 +522,32 @@ const App: React.FC = () => {
                   <h2 className="text-4xl font-black italic uppercase tracking-tighter text-orange-600">Dashboard Neural</h2>
                   <p className="text-xs text-slate-500 font-medium">Visualização da sua arquitetura de produtividade nos últimos 7 dias.</p>
                </div>
-
                <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                   <div className="lg:col-span-3 p-8 border rounded-[48px] bg-slate-900/60 border-slate-800 space-y-8">
                      <div className="flex justify-between items-center">
                         <h3 className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em]">Fluxo de Consistência Semanal</h3>
-                        <div className="flex gap-4">
-                           <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-orange-500"></div><span className="text-[8px] font-bold uppercase text-slate-400">Hábitos</span></div>
-                           <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-purple-500"></div><span className="text-[8px] font-bold uppercase text-slate-400">Rotinas</span></div>
-                        </div>
                      </div>
-
                      <div className="grid grid-cols-7 gap-4">
                         {last7Days.map((day) => {
                            const dayName = new Date(day + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '');
                            const habitCount = habits.filter(h => h.completedDates?.includes(day)).length;
                            const routineCount = recurringTasks.filter(rt => rt.completedDates?.includes(day)).length;
                            const isToday = day === selectedDate;
-                           
                            return (
                               <div key={day} className={`flex flex-col items-center gap-4 p-4 rounded-3xl transition-all ${isToday ? 'bg-orange-600/5 ring-1 ring-orange-500/20' : ''}`}>
                                  <span className={`text-[10px] font-black uppercase ${isToday ? 'text-orange-500' : 'text-slate-600'}`}>{dayName}</span>
-                                 
                                  <div className="flex flex-col gap-2 flex-1 justify-end min-h-[120px]">
-                                    <div className="w-4 bg-orange-600 rounded-full transition-all duration-1000" style={{ height: `${Math.max(4, habitCount * 20)}px` }}></div>
-                                    <div className="w-4 bg-purple-600 rounded-full transition-all duration-1000" style={{ height: `${Math.max(4, routineCount * 20)}px` }}></div>
+                                    <div className="w-4 bg-orange-600 rounded-full" style={{ height: `${Math.max(4, habitCount * 20)}px` }}></div>
+                                    <div className="w-4 bg-purple-600 rounded-full" style={{ height: `${Math.max(4, routineCount * 20)}px` }}></div>
                                  </div>
-                                 
-                                 <span className="text-[8px] font-black text-slate-700">{day.split('-')[2]}</span>
                               </div>
                            );
                         })}
                      </div>
                   </div>
-
-                  <div className="space-y-6">
-                    <div className="p-8 border rounded-[40px] bg-orange-600/5 border-orange-500/10 flex flex-col items-center justify-center text-center gap-4">
-                       <Trophy className="text-orange-500" size={40}/>
-                       <div>
-                          <p className="text-[8px] font-black uppercase text-slate-500 mb-1">XP Total</p>
-                          <p className="text-4xl font-black italic tracking-tighter text-orange-600">{points}</p>
-                       </div>
-                    </div>
-                    
-                    <div className="p-8 border rounded-[40px] bg-slate-900 border-slate-800 space-y-4">
-                       <h4 className="text-[8px] font-black uppercase text-slate-500 tracking-widest">Resumo Neural</h4>
-                       <div className="space-y-3">
-                          <div className="flex justify-between items-center p-3 bg-slate-800/40 rounded-2xl border border-slate-800">
-                             <span className="text-[10px] font-bold text-slate-400">Hábitos Ativos</span>
-                             <span className="text-sm font-black text-white">{habits.length}</span>
-                          </div>
-                          <div className="flex justify-between items-center p-3 bg-slate-800/40 rounded-2xl border border-slate-800">
-                             <span className="text-[10px] font-bold text-slate-400">Rotinas Fixas</span>
-                             <span className="text-sm font-black text-white">{recurringTasks.length}</span>
-                          </div>
-                          <div className="flex justify-between items-center p-3 bg-slate-800/40 rounded-2xl border border-slate-800">
-                             <span className="text-[10px] font-bold text-slate-400">Tarefas Pendentes</span>
-                             <span className="text-sm font-black text-orange-500">{tasks.filter(t => !t.completed).length}</span>
-                          </div>
-                       </div>
-                    </div>
-                  </div>
-               </div>
-
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div className="p-8 border rounded-[48px] bg-slate-900/60 border-slate-800">
-                     <h3 className="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-6">Mapeamento de Hábitos</h3>
-                     <div className="space-y-4">
-                        {habits.map(h => {
-                           const completionsThisWeek = last7Days.filter(d => h.completedDates?.includes(d)).length;
-                           return (
-                              <div key={h.id} className="space-y-2">
-                                 <div className="flex justify-between text-[10px] font-bold">
-                                    <span className="text-slate-300 truncate max-w-[150px] uppercase">{h.text}</span>
-                                    <span className="text-orange-500">{completionsThisWeek}/7 dias</span>
-                                 </div>
-                                 <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden flex gap-0.5">
-                                    {last7Days.map(day => (
-                                       <div key={day} className={`flex-1 h-full rounded-full ${h.completedDates?.includes(day) ? 'bg-orange-600' : 'bg-slate-700/30'}`}></div>
-                                    ))}
-                                 </div>
-                              </div>
-                           )
-                        })}
-                     </div>
-                  </div>
-
-                  <div className="p-8 border rounded-[48px] bg-slate-900/60 border-slate-800">
-                     <h3 className="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-6">Eficiência de Rotinas</h3>
-                     <div className="space-y-4">
-                        {recurringTasks.map(rt => {
-                           const completionsThisWeek = last7Days.filter(d => rt.completedDates?.includes(d)).length;
-                           return (
-                              <div key={rt.id} className="space-y-2">
-                                 <div className="flex justify-between text-[10px] font-bold">
-                                    <span className="text-slate-300 truncate max-w-[150px] uppercase">{rt.text}</span>
-                                    <span className="text-purple-500">{completionsThisWeek}/7 dias</span>
-                                 </div>
-                                 <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden flex gap-0.5">
-                                    {last7Days.map(day => (
-                                       <div key={day} className={`flex-1 h-full rounded-full ${rt.completedDates?.includes(day) ? 'bg-purple-600' : 'bg-slate-700/30'}`}></div>
-                                    ))}
-                                 </div>
-                              </div>
-                           )
-                        })}
-                     </div>
+                  <div className="p-8 border rounded-[40px] bg-orange-600/5 border-orange-500/10 flex flex-col items-center justify-center text-center gap-4">
+                     <Trophy className="text-orange-500" size={40}/>
+                     <div><p className="text-4xl font-black italic text-orange-600">{points}</p></div>
                   </div>
                </div>
             </div>
@@ -590,205 +556,118 @@ const App: React.FC = () => {
           {activeTab === 'execute' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-700">
               <div className="lg:col-span-2 space-y-8">
-                {/* Timer Area */}
+                {/* Timer */}
                 <div className="p-12 text-center border rounded-[48px] bg-slate-900/60 border-slate-800 relative overflow-hidden shadow-2xl group">
-                  <div className="absolute top-0 left-0 w-full h-1 bg-slate-800 overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-slate-800">
                     <div className="h-full bg-orange-600 transition-all duration-1000" style={{ width: `${(timeLeft / (90 * 60)) * 100}%` }}></div>
                   </div>
-                  <span className="text-[10px] font-black text-slate-500 tracking-[0.3em] uppercase mb-4 block">Ciclo Ultradiano</span>
-                  <h2 className="text-[100px] leading-none font-mono font-black tracking-tighter tabular-nums mb-8">{formatTime(timeLeft)}</h2>
+                  <h2 className="text-[100px] leading-none font-mono font-black tabular-nums mb-8">{formatTime(timeLeft)}</h2>
                   <div className="flex justify-center gap-6">
-                    <button onClick={() => { setIsTimerActive(!isTimerActive); if(!isTimerActive) playAudio(SOUNDS.TIMER_START); }} className="w-20 h-20 bg-orange-600 rounded-[32px] text-white shadow-glow-orange flex items-center justify-center hover:bg-orange-500 transition-all active:scale-95">
-                      {isTimerActive ? <Pause size={32}/> : <Play size={32} fill="currentColor"/>}
-                    </button>
-                    <button onClick={() => { setTimeLeft(90*60); setIsTimerActive(false); }} className="w-20 h-20 bg-slate-800/80 rounded-[32px] text-slate-400 flex items-center justify-center hover:text-white transition-colors"> <RotateCcw size={32}/> </button>
+                    <button onClick={() => setIsTimerActive(!isTimerActive)} className="w-20 h-20 bg-orange-600 rounded-[32px] flex items-center justify-center shadow-glow-orange active:scale-95 transition-all">{isTimerActive ? <Pause size={32}/> : <Play size={32} fill="currentColor"/>}</button>
+                    <button onClick={() => setTimeLeft(90*60)} className="w-20 h-20 bg-slate-800/80 rounded-[32px] flex items-center justify-center hover:text-white transition-colors"><RotateCcw size={32}/></button>
                   </div>
                 </div>
 
                 {/* Protocolo de 3 Missões Card */}
-                <div className="p-10 border rounded-[48px] bg-slate-900/60 border-slate-800 shadow-xl backdrop-blur-sm space-y-6">
-                  <div className="flex justify-between items-center px-2">
-                    <h3 className="text-[11px] font-black uppercase text-orange-500 tracking-[0.3em] flex items-center gap-2">
-                      <Target size={14} /> Protocolo: 3 Missões do Dia
-                    </h3>
-                    <div className="flex gap-1">
-                      {dailyMissions.map(m => (
-                        <div key={m.id} className={`w-2 h-2 rounded-full ${m.completed ? 'bg-orange-500 shadow-glow-orange' : 'bg-slate-800'}`}></div>
-                      ))}
-                    </div>
-                  </div>
-
+                <div className="p-10 border rounded-[48px] bg-slate-900/60 border-slate-800 shadow-xl space-y-6">
+                  <h3 className="text-[11px] font-black uppercase text-orange-500 tracking-[0.3em] flex items-center gap-2">
+                    <Target size={14} /> Protocolo: 3 Missões Diárias
+                  </h3>
                   <div className="space-y-4">
-                    {dailyMissions.map((mission) => (
-                      <div key={mission.id} className={`p-6 rounded-[32px] border transition-all flex items-center gap-6 ${mission.completed ? 'bg-orange-600/5 border-orange-500/20 opacity-60' : 'bg-slate-800/30 border-slate-700/30 hover:border-orange-500/30'}`}>
-                        <button 
-                          onClick={() => updateDailyMission(mission.id, { completed: !mission.completed })}
-                          className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all ${mission.completed ? 'bg-orange-600 text-white' : 'bg-slate-900 border border-slate-700 text-transparent hover:text-slate-600'}`}
-                        >
-                          <Check size={20} strokeWidth={4} />
-                        </button>
-                        
-                        <input 
-                          type="text" 
-                          placeholder={`Missão #${mission.id}...`}
-                          className={`flex-1 bg-transparent border-none outline-none font-bold text-lg placeholder:text-slate-700 ${mission.completed ? 'line-through text-slate-500' : 'text-white'}`}
-                          value={mission.text}
-                          onChange={(e) => updateDailyMission(mission.id, { text: e.target.value })}
-                        />
-
-                        <div className="flex items-center gap-2">
-                          {[15, 30, 45, 60].map((mins) => (
-                            <button 
-                              key={mins}
-                              onClick={() => {
-                                updateDailyMission(mission.id, { minutes: mins });
-                                setTimeLeft(mins * 60);
-                                setIsTimerActive(false);
-                              }}
-                              className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase transition-all ${mission.minutes === mins ? 'bg-orange-600/20 text-orange-500 border border-orange-500/30' : 'bg-slate-900 border border-slate-800 text-slate-600 hover:text-slate-400'}`}
-                            >
-                              {mins}m
-                            </button>
-                          ))}
+                    {dailyMissions.map((mission) => {
+                      const isJustCompleted = justCompletedMissionId === mission.id;
+                      return (
+                        <div key={mission.id} className={`p-6 rounded-[32px] border transition-all duration-500 flex items-center gap-6 relative overflow-hidden ${mission.completed ? 'bg-green-600/5 border-green-500/20 opacity-60' : 'bg-slate-800/30 border-slate-700/30'} ${isJustCompleted ? 'animate-glow-success border-green-500' : ''}`}>
+                          <button 
+                            onClick={() => updateDailyMission(mission.id, { completed: !mission.completed })} 
+                            className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all ${mission.completed ? 'bg-green-600 text-white' : 'bg-slate-900 border border-slate-700'} ${isJustCompleted ? 'animate-bounce' : ''}`}
+                          >
+                            <Check size={20} strokeWidth={3} className={mission.completed ? "animate-in zoom-in duration-300" : "text-transparent"} />
+                          </button>
+                          <input type="text" placeholder={`Missão #${mission.id}...`} className={`flex-1 bg-transparent border-none outline-none font-bold text-lg transition-all ${mission.completed ? 'line-through text-slate-500' : 'text-white'}`} value={mission.text} onChange={(e) => updateDailyMission(mission.id, { text: e.target.value })} />
+                          <div className="flex gap-1">
+                            {[15, 30, 45, 60].map(m => (
+                              <button key={m} onClick={() => { setTimeLeft(m * 60); updateDailyMission(mission.id, { minutes: m }); }} className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all ${mission.minutes === m ? 'bg-orange-600 text-white' : 'bg-slate-800 text-slate-500 hover:text-slate-300'}`}>{m}m</button>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
-                  <p className="text-[9px] text-center font-bold text-slate-600 uppercase tracking-widest">Timebox: Clique em um tempo para carregar o Timer</p>
                 </div>
 
-                {/* Selected Task Details */}
-                <div className="p-10 border rounded-[48px] bg-slate-900/60 border-slate-800 min-h-[250px] shadow-xl backdrop-blur-sm">
+                {/* Task Details Area */}
+                <div className={`p-10 border rounded-[48px] bg-slate-900/60 border-slate-800 min-h-[250px] shadow-xl transition-all duration-700 ${justCompletedTaskId === selectedTask?.id ? 'animate-glow-success border-green-500' : ''}`}>
                   {selectedTask ? (
                     <div className="space-y-8 animate-in slide-in-from-bottom duration-300">
                       <div className="flex justify-between items-start">
-                        <div className="space-y-3">
-                          <h2 className={`text-4xl font-black ${selectedTask.completed ? 'line-through opacity-20' : ''}`}>{selectedTask.text}</h2>
-                          <div className="flex gap-2">
-                            <span className="px-3 py-1 bg-orange-600/20 text-orange-500 rounded-full text-[8px] font-black uppercase tracking-widest">{selectedTask.priority}</span>
-                            <EnergyBadge energy={selectedTask.energy} onClick={() => updateTaskEnergy(selectedTask.id)} />
-                          </div>
+                        <div className="space-y-2">
+                           <h2 className={`text-4xl font-black transition-all ${selectedTask.completed ? 'line-through opacity-20' : ''}`}>{selectedTask.text}</h2>
+                           <div className="flex gap-2 items-center">
+                              <EnergyBadge energy={selectedTask.energy} onClick={() => updateTaskEnergy(selectedTask.id)} highlighted />
+                              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{selectedTask.priority}</span>
+                           </div>
                         </div>
-                        <button onClick={() => setSelectedTask(null)} className="p-2 text-slate-500 hover:text-white transition-colors"><X /></button>
+                        <button onClick={() => setSelectedTask(null)} className="p-2 text-slate-600 hover:text-white transition-colors"><X/></button>
                       </div>
                       <div className="space-y-4">
                         {selectedTask.subtasks.map((s, i) => (
-                          <div key={i} className="p-5 bg-slate-800/30 rounded-3xl flex items-center gap-5 border border-slate-700/30">
-                            <span className="text-[10px] font-black text-orange-500 w-8 h-8 flex items-center justify-center bg-orange-500/10 rounded-full border border-orange-500/20">{i+1}</span>
-                            <p className="text-sm font-medium opacity-80">{s}</p>
+                          <div key={i} className="p-5 bg-slate-800/30 rounded-3xl flex items-center gap-5 border border-slate-700/30 transition-all hover:border-slate-600">
+                            <span className="text-orange-500 font-black">{i+1}</span><p className="text-slate-300 font-medium">{s}</p>
                           </div>
                         ))}
-                        {selectedTask.subtasks.length === 0 && !(selectedTask as any).isRecurring && (
-                          <button onClick={() => handleDecompose(selectedTask)} disabled={isDecomposing} className="w-full py-16 border-2 border-dashed border-slate-800 rounded-[32px] flex flex-col items-center gap-3 opacity-40 hover:opacity-100 hover:border-orange-500/50 transition-all group">
-                            {isDecomposing ? <Loader2 className="animate-spin text-orange-500" /> : <Sparkles className="group-hover:text-orange-500"/>}
-                            <span className="text-[10px] font-black uppercase tracking-widest">{isDecomposing ? 'Processando Neurônios...' : 'Chunking IA (Desmembrar)'}</span>
-                          </button>
-                        )}
                       </div>
                       <button 
-                        onClick={() => {
-                          if((selectedTask as any).isRecurring) { toggleRecurringTask(selectedTask.id); setSelectedTask(null); } 
-                          else { toggleTask(selectedTask.id); }
-                        }} 
-                        className={`w-full py-6 rounded-3xl font-black uppercase tracking-[0.2em] shadow-2xl transition-all active:scale-95 ${selectedTask.completed ? 'bg-green-600/20 text-green-500 border border-green-500/50' : 'bg-orange-600 text-white'} shadow-glow-orange`}
+                        onClick={() => toggleTask(selectedTask.id)} 
+                        className={`w-full py-6 rounded-3xl font-black uppercase transition-all duration-300 active:scale-[0.98] flex items-center justify-center gap-3 ${selectedTask.completed ? 'bg-green-600/10 text-green-500 border border-green-600/30' : 'bg-orange-600 text-white shadow-glow-orange hover:bg-orange-500'}`}
                       >
-                        {selectedTask.completed ? "Reativar Alvo" : "Completar Missão (+XP)"}
+                        {selectedTask.completed ? (
+                          <><RefreshCw size={20}/> Reativar Fluxo</>
+                        ) : (
+                          <><Check size={20} strokeWidth={3}/> Concluir Missão (+XP)</>
+                        )}
                       </button>
                     </div>
                   ) : (
-                    <div className="py-12 text-center opacity-10 flex flex-col items-center gap-6">
-                      <Target size={60}/>
-                      <p className="text-lg font-black uppercase italic tracking-tighter">Selecione da Fila para Detalhar</p>
-                    </div>
+                    <div className="py-12 text-center opacity-10 flex flex-col items-center gap-6 animate-pulse"><Target size={60}/><p className="font-black uppercase text-[10px] tracking-widest">Selecione uma meta para focar</p></div>
                   )}
                 </div>
               </div>
 
+              {/* Fila Lateral */}
               <div className="space-y-6">
                 <div className="p-8 border rounded-[40px] bg-slate-900/60 border-slate-800 shadow-lg">
-                  <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Fila de Execução</h3>
-                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                  </div>
-                  <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
-                      {executableList.map(t => (
-                        <button 
-                          key={t.id} 
-                          onClick={() => setSelectedTask(t as any)} 
-                          className={`w-full p-5 text-left border rounded-[24px] transition-all group relative overflow-hidden ${selectedTask?.id === t.id ? 'bg-orange-600/10 border-orange-500 ring-1 ring-orange-500' : 'border-slate-800 bg-slate-800/20 hover:bg-slate-800/40'}`}
-                        >
-                          <div className="flex justify-between items-center gap-3">
-                            <p className="text-sm font-bold truncate group-hover:translate-x-1 transition-transform">{t.text}</p>
-                            {(t as any).isRecurring && <Repeat size={12} className="text-purple-400 shrink-0" />}
-                          </div>
-                        </button>
-                      ))}
-                      {executableList.length === 0 && (
-                        <div className="text-center py-20 opacity-30">
-                          <CheckCircle2 className="mx-auto mb-2" size={32} />
-                          <p className="text-[10px] uppercase font-black">Limpo</p>
+                  <h3 className="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-6">Fila de Execução</h3>
+                  <div className="space-y-3">
+                    {executableList.map(t => (
+                      <button key={t.id} onClick={() => setSelectedTask(t as any)} className={`w-full p-5 text-left border rounded-[24px] transition-all group ${selectedTask?.id === t.id ? 'border-orange-500 bg-orange-500/5' : 'border-slate-800 bg-slate-800/20 hover:bg-slate-800/30 hover:border-slate-700'}`}>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-bold truncate block transition-transform group-hover:translate-x-1">{t.text}</span>
+                          <ChevronRight size={14} className={`transition-opacity ${selectedTask?.id === t.id ? 'opacity-100' : 'opacity-0'}`} />
                         </div>
-                      )}
+                      </button>
+                    ))}
+                    {executableList.length === 0 && <p className="text-center py-10 text-[10px] text-slate-600 font-black uppercase opacity-40">Nenhuma tarefa pendente</p>}
                   </div>
                 </div>
               </div>
             </div>
           )}
 
-          {activeTab === 'dopamenu' && (
-            <div className="space-y-10 animate-in fade-in duration-700">
-               <div className="flex justify-between items-center px-4">
-                <div className="space-y-2">
-                  <h2 className="text-4xl font-black italic uppercase tracking-tighter text-orange-600">Dopamenu</h2>
-                  <p className="text-xs text-slate-500 font-medium">Recompensas saudáveis para manter o motor neural lubrificado.</p>
-                </div>
-                <button onClick={() => setShowDopamenuForm(true)} className="w-16 h-16 bg-orange-600 rounded-3xl flex items-center justify-center text-white shadow-glow-orange hover:scale-110 transition-transform active:scale-95">
-                  <Plus size={32}/>
-                </button>
+          {activeTab === 'capture' && (
+            <div className="max-w-3xl mx-auto py-24 space-y-16 text-center animate-in zoom-in duration-500">
+              <div className="space-y-4">
+                <h2 className="text-6xl font-black italic uppercase leading-tight">Descarregar<br/>Mente</h2>
               </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {['Starter', 'Main', 'Side', 'Dessert'].map((category) => (
-                  <div key={category} className="p-8 bg-slate-900/40 border border-slate-800/50 rounded-[48px] space-y-6">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-orange-600/10 text-orange-500 rounded-xl">
-                        {category === 'Starter' ? <Zap size={20}/> : category === 'Main' ? <Utensils size={20}/> : category === 'Side' ? <Waves size={20}/> : <Star size={20}/>}
-                      </div>
-                      <h3 className="text-xl font-black uppercase italic tracking-wider">{category === 'Starter' ? 'Entradas (5-10min)' : category === 'Main' ? 'Pratos Principais (30min+)' : category === 'Side' ? 'Acompanhamentos' : 'Sobremesas (Grandes vitórias)'}</h3>
-                    </div>
-                    
-                    <div className="space-y-4">
-                      {dopamenuItems.filter(item => item.category === category).map(item => (
-                        <div key={item.id} className="p-6 bg-slate-800/20 border border-slate-700/30 rounded-3xl group flex justify-between items-start transition-all hover:bg-slate-800/40">
-                          <div className="space-y-1">
-                            <h4 className="font-bold text-orange-400 uppercase text-sm tracking-wide">{item.label}</h4>
-                            <p className="text-[11px] text-slate-500 font-medium leading-relaxed">{item.description}</p>
-                          </div>
-                          <button onClick={() => removeDopamenuItem(item.id)} className="p-2 text-slate-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
-                            <Trash2 size={16}/>
-                          </button>
-                        </div>
-                      ))}
-                      {dopamenuItems.filter(item => item.category === category).length === 0 && (
-                        <div className="py-8 text-center opacity-20 italic text-xs">Vazio</div>
-                      )}
-                    </div>
-                  </div>
-                ))}
+              <div className="p-10 bg-slate-900 border border-slate-800 rounded-[64px] flex items-center gap-6 focus-within:ring-2 focus-within:ring-orange-600 transition-all shadow-2xl">
+                <input autoFocus className="flex-1 bg-transparent border-none text-3xl font-black outline-none placeholder:text-slate-800" placeholder="O que está na cabeça?" value={newTaskText} onChange={e => setNewTaskText(e.target.value)} onKeyDown={e => { if(e.key === 'Enter') { addTask(newTaskText); setNewTaskText(""); setActiveTab('plan'); }}} />
+                <button onClick={() => { addTask(newTaskText); setNewTaskText(""); setActiveTab('plan'); }} className="w-24 h-24 bg-orange-600 rounded-[40px] flex items-center justify-center shadow-glow-orange active:scale-95 transition-all"><Plus size={48}/></button>
               </div>
             </div>
           )}
 
           {activeTab === 'plan' && (
             <div className="space-y-8 animate-in fade-in duration-500">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center px-4 gap-4">
-                <h2 className="text-3xl font-black italic uppercase tracking-tighter">Matriz de Eisenhower</h2>
-                <div className="flex gap-4">
-                  <button onClick={handleAutoCategorize} disabled={isOptimizing} className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-full text-[10px] font-black uppercase flex items-center gap-2 shadow-xl shadow-blue-900/20 disabled:opacity-50 transition-all">
-                    {isOptimizing ? <Loader2 size={14} className="animate-spin"/> : <Brain size={14}/>} Otimizar IA
-                  </button>
-                </div>
-              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <MatrixQuadrant priority={Priority.Q1} title="Q1: Crítico e Urgente" color="bg-red-600/5 border-red-500/20" tasks={dayTasks.filter(t => t.priority === Priority.Q1 && !t.completed)} onSelect={(t) => { setSelectedTask(t); setActiveTab('execute'); }} onDrop={handleTaskDrop} onUpdateEnergy={updateTaskEnergy} currentArousal={currentArousal} />
                 <MatrixQuadrant priority={Priority.Q2} title="Q2: Importante/Estratégico" color="bg-orange-600/5 border-orange-500/20" tasks={dayTasks.filter(t => t.priority === Priority.Q2 && !t.completed)} onSelect={(t) => { setSelectedTask(t); setActiveTab('execute'); }} onDrop={handleTaskDrop} onUpdateEnergy={updateTaskEnergy} currentArousal={currentArousal} />
@@ -798,77 +677,30 @@ const App: React.FC = () => {
             </div>
           )}
 
-          {activeTab === 'upgrades' && (
-            <div className="space-y-12 animate-in fade-in duration-500">
-              <div className="px-4">
-                 <h2 className="text-4xl font-black italic uppercase tracking-tighter text-orange-600">Upgrade Neural</h2>
-                 <p className="text-xs text-slate-500 font-medium mt-1">Desbloqueie novas arquiteturas e camadas visuais com seu esforço cognitivo.</p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {LEVELS.map(l => {
-                  const isUnlocked = points >= l.minPoints;
-                  return (
-                    <div key={l.level} className={`p-8 rounded-[48px] border transition-all ${isUnlocked ? 'bg-[#0a1128] border-orange-500/20' : 'bg-slate-900/20 border-slate-800/50 grayscale opacity-40'}`}>
-                       <div className="flex justify-between items-start mb-6">
-                          <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${isUnlocked ? 'bg-orange-600/10 text-orange-500' : 'bg-slate-800 text-slate-600'}`}>
-                             {l.level === 1 ? <Neuron size={28}/> : l.level === 5 ? <Award size={28}/> : <Binary size={28}/>}
-                          </div>
-                          <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">NVL {l.level}</span>
-                       </div>
-                       <h3 className="text-2xl font-black uppercase mb-2">{l.title}</h3>
-                       <p className="text-xs text-slate-500 mb-6">{l.unlock}</p>
-                       
-                       {isUnlocked && l.themeId && (
-                         <button 
-                           onClick={() => handleThemeChange(l.themeId!)} 
-                           className={`w-full py-4 rounded-2xl font-black uppercase text-[10px] flex items-center justify-center gap-2 transition-all ${visualTheme === l.themeId ? 'bg-orange-600 text-white shadow-glow-orange' : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'}`}
-                         >
-                           <Palette size={14}/> {visualTheme === l.themeId ? 'Tema Ativo' : 'Ativar Estilo'}
-                         </button>
-                       )}
-                       {!isUnlocked && (
-                         <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden mt-4">
-                            <div className="h-full bg-slate-700 transition-all" style={{ width: `${Math.min(100, (points / l.minPoints) * 100)}%` }}></div>
-                         </div>
-                       )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
           {activeTab === 'fixed' && (
             <div className="space-y-8 animate-in fade-in duration-500">
               <div className="flex justify-between items-center px-4">
-                <h2 className="text-4xl font-black italic uppercase tracking-tighter text-purple-400">Rotinas Fixas</h2>
-                <button onClick={() => setShowRecurringForm(true)} className="w-16 h-16 bg-purple-600 rounded-3xl flex items-center justify-center text-white shadow-glow-blue hover:scale-110 transition-transform active:scale-95">
-                  <Plus size={32}/>
-                </button>
+                <h2 className="text-4xl font-black italic uppercase text-purple-400">Rotinas Fixas</h2>
+                <button onClick={() => setShowRecurringForm(true)} className="w-16 h-16 bg-purple-600 rounded-3xl flex items-center justify-center text-white shadow-glow-blue hover:scale-105 active:scale-95 transition-all"><Plus size={32}/></button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                 {recurringTasks.map(rt => {
                   const isDoneToday = rt.completedDates.includes(selectedDate);
                   return (
-                    <div key={rt.id} className={`p-8 bg-slate-900/60 border rounded-[40px] flex flex-col justify-between h-[300px] group transition-all relative overflow-visible ${isDoneToday ? 'border-green-500/30 bg-green-500/5 animate-glow-success' : 'border-slate-800 hover:border-purple-500/40'}`}>
+                    <div key={rt.id} className={`p-8 bg-slate-900/60 border rounded-[40px] h-[300px] flex flex-col justify-between group transition-all relative overflow-visible ${isDoneToday ? 'border-green-500/30 bg-green-500/5' : 'border-slate-800 hover:border-purple-500/40 shadow-xl'}`}>
                       {sparkleTaskId === rt.id && <SparkleParticles />}
                       <div className="space-y-4">
                         <div className="flex justify-between items-start">
-                          <div className={`p-4 rounded-2xl transition-colors ${isDoneToday ? 'bg-green-600/10 text-green-400' : 'bg-purple-600/10 text-purple-400'}`}>
-                            {rt.frequency === Frequency.DAILY ? <Sun size={24}/> : rt.frequency === Frequency.WEEKLY ? <CalendarDays size={24}/> : <Calendar size={24}/>}
-                          </div>
-                          <EnergyBadge energy={rt.energy} />
+                          <div className={`p-4 rounded-2xl transition-colors ${isDoneToday ? 'bg-green-600/10 text-green-400' : 'bg-purple-600/10 text-purple-400'}`}><Repeat size={24}/></div>
+                          <EnergyBadge energy={rt.energy} onClick={() => updateRecurringTaskEnergy(rt.id)} highlighted />
                         </div>
-                        <h3 className={`text-xl font-black uppercase transition-opacity ${isDoneToday ? 'opacity-40 line-through' : ''}`}>{rt.text}</h3>
+                        <h3 className={`text-xl font-black uppercase transition-all ${isDoneToday ? 'opacity-40 line-through' : ''}`}>{rt.text}</h3>
                       </div>
                       <div className="flex gap-2">
-                        <button onClick={() => toggleRecurringTask(rt.id)} className={`flex-1 py-3 px-4 rounded-2xl text-[10px] font-black uppercase transition-all flex items-center justify-center gap-2 ${isDoneToday ? 'bg-green-600/20 text-green-500' : 'bg-purple-600 text-white hover:bg-purple-500'}`}>
+                        <button onClick={() => toggleRecurringTask(rt.id)} className={`flex-1 py-3 px-4 rounded-2xl text-[10px] font-black uppercase transition-all ${isDoneToday ? 'bg-green-600/20 text-green-500 border border-green-600/30' : 'bg-purple-600 text-white hover:bg-purple-500 shadow-glow-blue'}`}>
                           {isDoneToday ? 'Reativar' : 'Concluir'}
                         </button>
-                        <button onClick={() => setRecurringTasks(prev => prev.filter(p => p.id !== rt.id))} className="p-3 bg-red-600/5 text-red-500/50 hover:text-red-500 hover:bg-red-600/10 rounded-2xl transition-all">
-                            <Trash2 size={16}/>
-                        </button>
+                        <button onClick={() => setRecurringTasks(prev => prev.filter(p => p.id !== rt.id))} className="p-3 bg-red-600/5 text-red-500/50 hover:text-red-500 hover:bg-red-500/10 rounded-2xl transition-all"><Trash2 size={16}/></button>
                       </div>
                     </div>
                   );
@@ -880,28 +712,58 @@ const App: React.FC = () => {
           {activeTab === 'habits' && (
             <div className="space-y-12 animate-in slide-in-from-bottom duration-700">
               <div className="flex justify-between items-center px-4">
-                <h2 className="text-4xl font-black italic uppercase tracking-tighter text-orange-600">Andaimação Neural</h2>
-                <button onClick={() => setShowHabitForm(true)} className="w-16 h-16 bg-orange-600 rounded-3xl flex items-center justify-center text-white shadow-glow-orange hover:scale-110 transition-transform active:scale-95">
-                  <Plus size={32}/>
-                </button>
+                <h2 className="text-4xl font-black italic uppercase text-orange-600">Hábitos</h2>
+                <button onClick={() => setShowHabitForm(true)} className="w-16 h-16 bg-orange-600 rounded-3xl flex items-center justify-center text-white shadow-glow-orange hover:scale-105 active:scale-95 transition-all"><Plus size={32}/></button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                 {habits.map(h => {
                   const isDoneToday = h.lastCompleted === selectedDate;
                   return (
-                    <div key={h.id} className={`p-8 rounded-[40px] border transition-all flex flex-col justify-between h-[300px] group ${isDoneToday ? 'bg-green-600/5 border-green-500/30' : 'bg-slate-900/60 border-slate-800 hover:border-orange-500/50'}`}>
-                      <div className="space-y-4">
+                    <div key={h.id} className={`p-8 rounded-[40px] border transition-all min-h-[380px] flex flex-col justify-between ${isDoneToday ? 'bg-green-600/5 border-green-500/30 shadow-inner opacity-70' : 'bg-slate-900/60 border-slate-800 shadow-xl'}`}>
+                      <div className="space-y-6">
                         <div className="flex justify-between items-start">
                           <Flame className={h.streak > 0 ? "text-orange-500 animate-pulse" : "text-slate-800"} size={28} />
-                          <div className="text-right"><span className="text-4xl font-black italic leading-none">{h.streak}</span><p className="text-[10px] font-black text-slate-500 uppercase">DIAS</p></div>
+                          <div className="text-right flex items-baseline gap-1">
+                            <span className="text-4xl font-black italic leading-none">{h.streak}</span>
+                            <p className="text-[10px] uppercase font-black text-slate-500 tracking-tighter">Dias</p>
+                          </div>
                         </div>
-                        <h3 className="text-xl font-black leading-tight mb-2 uppercase">{h.text}</h3>
+
+                        <div className="space-y-4">
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-black uppercase text-slate-600 tracking-widest pl-1">O Hábito</label>
+                            <input 
+                              className="w-full bg-transparent border-none text-xl font-black uppercase outline-none focus:text-orange-500 transition-colors"
+                              value={h.text}
+                              onChange={(e) => updateHabit(h.id, { text: e.target.value })}
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-black uppercase text-slate-600 tracking-widest pl-1">Âncora (Depois de...)</label>
+                            <input 
+                              className="w-full bg-slate-800/40 p-2 rounded-xl border border-transparent focus:border-orange-500/30 text-xs font-bold text-slate-400 outline-none transition-all"
+                              value={h.anchor}
+                              onChange={(e) => updateHabit(h.id, { anchor: e.target.value })}
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-black uppercase text-slate-600 tracking-widest pl-1">Ação (Eu vou...)</label>
+                            <input 
+                              className="w-full bg-slate-800/40 p-2 rounded-xl border border-transparent focus:border-orange-500/30 text-xs font-bold text-slate-200 outline-none transition-all"
+                              value={h.tinyAction}
+                              onChange={(e) => updateHabit(h.id, { tinyAction: e.target.value })}
+                            />
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex gap-2">
-                        <button onClick={() => completeHabit(h.id)} disabled={isDoneToday} className={`flex-1 py-4 rounded-2xl font-black uppercase text-xs transition-all ${isDoneToday ? 'bg-green-600/20 text-green-500' : 'bg-orange-600 text-white hover:bg-orange-500'}`}>
-                          {isDoneToday ? 'Finalizado hoje' : 'Ativar Hábito'}
+
+                      <div className="flex gap-2 pt-6">
+                        <button onClick={() => completeHabit(h.id)} disabled={isDoneToday} className={`flex-1 py-4 rounded-2xl font-black text-xs transition-all ${isDoneToday ? 'bg-green-600/20 text-green-500 border border-green-600/20' : 'bg-orange-600 text-white hover:bg-orange-500 active:scale-95 shadow-glow-orange'}`}>
+                          {isDoneToday ? 'Consolidado' : 'Reforçar Sinapse'}
                         </button>
-                        <button onClick={() => setHabits(prev => prev.filter(p => p.id !== h.id))} className="p-4 bg-slate-800 text-slate-600 hover:text-red-500 rounded-2xl transition-colors">
+                        <button onClick={() => setHabits(prev => prev.filter(p => p.id !== h.id))} className="p-4 bg-slate-800/50 text-slate-600 hover:text-red-500 rounded-2xl transition-all hover:bg-red-500/10">
                           <Trash2 size={18}/>
                         </button>
                       </div>
@@ -912,83 +774,72 @@ const App: React.FC = () => {
             </div>
           )}
 
-          {activeTab === 'capture' && (
-            <div className="max-w-3xl mx-auto py-24 space-y-16 text-center animate-in zoom-in duration-500">
-              <div className="space-y-4">
-                <h2 className="text-6xl font-black italic tracking-tighter uppercase leading-tight">Descarregar<br/>Mente</h2>
-                <p className="text-sm text-slate-500 font-medium tracking-wide">Capture o caos antes que ele se torne sobrecarga cognitiva.</p>
+          {activeTab === 'upgrades' && (
+            <div className="space-y-12 animate-in fade-in duration-500">
+              <div className="px-4">
+                 <h2 className="text-4xl font-black italic uppercase text-orange-600">Upgrades</h2>
+                 <p className="text-xs text-slate-500 mt-1">Desbloqueie estilos com seu progresso neural.</p>
               </div>
-              <div className="p-10 bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-[64px] shadow-2xl flex items-center gap-6 focus-within:ring-2 focus-within:ring-orange-600 focus-within:border-transparent transition-all group">
-                <input 
-                  autoFocus 
-                  className="flex-1 bg-transparent border-none text-3xl font-black outline-none placeholder:text-slate-800 transition-colors focus:placeholder:text-slate-700" 
-                  placeholder="O que está na sua cabeça?" 
-                  value={newTaskText} 
-                  onChange={e => setNewTaskText(e.target.value)} 
-                  onKeyDown={e => { 
-                    if(e.key === 'Enter') { 
-                      addTask(newTaskText); 
-                      setNewTaskText(""); 
-                      setActiveTab('plan'); 
-                    } 
-                  }} 
-                />
-                <button 
-                  onClick={() => { 
-                    addTask(newTaskText); 
-                    setNewTaskText(""); 
-                    setActiveTab('plan'); 
-                  }} 
-                  className="w-24 h-24 bg-orange-600 rounded-[40px] flex items-center justify-center hover:scale-105 transition-all shadow-glow-orange"
-                >
-                  <Plus size={48} className="text-white"/>
-                </button>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {LEVELS.map(l => {
+                  const isUnlocked = points >= l.minPoints;
+                  return (
+                    <div key={l.level} className={`p-8 rounded-[48px] border transition-all ${isUnlocked ? 'bg-[#0a1128] border-orange-500/20 shadow-2xl' : 'bg-slate-900/20 border-slate-800/50 grayscale opacity-40'}`}>
+                       <h3 className="text-2xl font-black uppercase mb-2">{l.title}</h3>
+                       <p className="text-xs text-slate-500 mb-6">{l.unlock}</p>
+                       {isUnlocked && l.themeId && (
+                         <button onClick={() => handleThemeChange(l.themeId!)} className={`w-full py-4 rounded-2xl font-black uppercase text-[10px] transition-all ${visualTheme === l.themeId ? 'bg-orange-600 text-white shadow-glow-orange' : 'bg-slate-800 text-slate-400 hover:text-white'}`}>
+                           {visualTheme === l.themeId ? 'Estilo Ativo' : 'Ativar Estilo'}
+                         </button>
+                       )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'dopamenu' && (
+            <div className="space-y-10 animate-in fade-in duration-700">
+               <div className="flex justify-between items-center px-4">
+                <h2 className="text-4xl font-black italic uppercase text-orange-600">Dopamenu</h2>
+                <button onClick={() => setShowDopamenuForm(true)} className="w-16 h-16 bg-orange-600 rounded-3xl flex items-center justify-center text-white shadow-glow-orange hover:scale-105 active:scale-95 transition-all"><Plus size={32}/></button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {['Starter', 'Main', 'Side', 'Dessert'].map((category) => (
+                  <div key={category} className="p-8 bg-slate-900/40 border border-slate-800/50 rounded-[48px] space-y-6">
+                    <h3 className="text-xl font-black uppercase italic text-orange-500">{category}</h3>
+                    <div className="space-y-4">
+                      {dopamenuItems.filter(item => item.category === category).map(item => (
+                        <div key={item.id} className="p-6 bg-slate-800/20 border border-slate-700/30 rounded-3xl flex justify-between items-start transition-all hover:border-slate-600">
+                          <div><h4 className="font-bold text-sm text-orange-400">{item.label}</h4><p className="text-[11px] text-slate-500">{item.description}</p></div>
+                          <button onClick={() => removeDopamenuItem(item.id)} className="p-2 text-slate-600 hover:text-red-500 transition-colors"><Trash2 size={16}/></button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
         </div>
       </main>
 
-      {/* Tutorial Overlay */}
+      {/* Tutorial Overlay e Modais seguem a mesma lógica... */}
       {tutorialStep !== null && (
         <div className="fixed inset-0 z-[3000] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-xl animate-in fade-in">
-          <div className="w-full max-w-lg bg-[#0a1128] border border-orange-500/20 rounded-[56px] p-12 text-center space-y-8 shadow-3xl relative overflow-hidden">
-             {/* Progress Bar */}
-             <div className="absolute top-0 left-0 w-full h-1 bg-slate-800">
-                <div className="h-full bg-orange-600 transition-all duration-500" style={{ width: `${((tutorialStep + 1) / TUTORIAL_STEPS.length) * 100}%` }}></div>
+          <div className="w-full max-w-2xl bg-[#0a1128] border border-orange-500/20 rounded-[56px] p-10 md:p-16 text-center space-y-10 shadow-3xl relative overflow-hidden">
+             <div className="absolute top-0 left-0 w-full h-1.5 bg-slate-800"><div className="h-full bg-orange-600 transition-all duration-500" style={{ width: `${((tutorialStep + 1) / TUTORIAL_STEPS.length) * 100}%` }}></div></div>
+             <div className="flex justify-center mb-4">{TUTORIAL_STEPS[tutorialStep].icon}</div>
+             <div className="space-y-6">
+                <div><h2 className="text-4xl font-black uppercase italic text-orange-500 tracking-tighter mb-2">{TUTORIAL_STEPS[tutorialStep].title}</h2></div>
+                <div className="bg-slate-900/50 p-6 rounded-[32px] border border-slate-800 text-left"><p className="text-sm text-slate-300 italic">"{TUTORIAL_STEPS[tutorialStep].theory}"</p></div>
+                <div className="space-y-3 text-left pl-4"><p className="text-base text-slate-200 font-medium leading-relaxed">{TUTORIAL_STEPS[tutorialStep].description}</p></div>
              </div>
-
-             <div className="flex justify-center mb-4">
-                {TUTORIAL_STEPS[tutorialStep].icon}
-             </div>
-             
-             <div className="space-y-4">
-                <h2 className="text-3xl font-black uppercase italic text-orange-500">{TUTORIAL_STEPS[tutorialStep].title}</h2>
-                <p className="text-sm text-slate-400 font-medium leading-relaxed">
-                  {TUTORIAL_STEPS[tutorialStep].description}
-                </p>
-             </div>
-
-             <div className="flex flex-col gap-4">
-                <button 
-                  onClick={nextTutorialStep} 
-                  className="w-full py-5 bg-orange-600 text-white rounded-3xl font-black uppercase tracking-widest shadow-glow-orange hover:bg-orange-500 transition-all flex items-center justify-center gap-2 group"
-                >
-                  {tutorialStep === TUTORIAL_STEPS.length - 1 ? "Começar Jornada" : "Entendi, Próximo"}
-                  <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
+             <div className="flex flex-col gap-4 pt-4">
+                <button onClick={nextTutorialStep} className="w-full py-6 bg-orange-600 text-white rounded-[32px] font-black uppercase tracking-[0.2em] shadow-glow-orange flex items-center justify-center gap-3">
+                  {tutorialStep === TUTORIAL_STEPS.length - 1 ? "Ativar Neurônios" : "Próxima Camada"}<ArrowRight size={24}/>
                 </button>
-                <button 
-                  onClick={skipTutorial} 
-                  className="text-xs font-black text-slate-500 uppercase hover:text-white transition-colors"
-                >
-                  Pular Tutorial
-                </button>
-             </div>
-             
-             <div className="flex justify-center gap-1.5">
-                {TUTORIAL_STEPS.map((_, i) => (
-                  <div key={i} className={`h-1.5 rounded-full transition-all ${i === tutorialStep ? 'w-8 bg-orange-600' : 'w-1.5 bg-slate-800'}`}></div>
-                ))}
              </div>
           </div>
         </div>
@@ -996,65 +847,48 @@ const App: React.FC = () => {
 
       {/* Forms Modals */}
       {showHabitForm && (
-        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-xl animate-in fade-in">
-          <form onSubmit={addHabit} className="w-full max-w-lg bg-[#0a1128] border border-slate-800 rounded-[56px] p-12 space-y-8 shadow-3xl">
-            <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-black uppercase italic text-orange-600">Nova Arquitetura</h2>
-              <button type="button" onClick={() => setShowHabitForm(false)} className="p-2 text-slate-500 hover:text-white"><X/></button>
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-xl">
+          <form onSubmit={addHabit} className="w-full max-w-lg bg-[#0a1128] border border-slate-800 rounded-[56px] p-12 space-y-8 shadow-2xl">
+            <h2 className="text-2xl font-black text-orange-600 uppercase">Novo Hábito</h2>
+            <div className="space-y-4">
+              <input required className="w-full py-4 px-6 rounded-2xl bg-slate-900 outline-none border border-slate-800 focus:border-orange-500 transition-colors" placeholder="Hábito" value={habitForm.text} onChange={e => setHabitForm({...habitForm, text: e.target.value})} />
+              <input className="w-full py-4 px-6 rounded-2xl bg-slate-900 outline-none border border-slate-800 focus:border-orange-500 transition-colors" placeholder="Âncora" value={habitForm.anchor} onChange={e => setHabitForm({...habitForm, anchor: e.target.value})} />
+              <input className="w-full py-4 px-6 rounded-2xl bg-slate-900 outline-none border border-slate-800 focus:border-orange-500 transition-colors" placeholder="Ação" value={habitForm.tinyAction} onChange={e => setHabitForm({...habitForm, tinyAction: e.target.value})} />
             </div>
-            <div className="space-y-6">
-              <input required className="w-full py-4 px-6 rounded-2xl bg-slate-900 border border-slate-800 outline-none focus:border-orange-600 transition-colors" placeholder="Hábito Alvo" value={habitForm.text} onChange={e => setHabitForm({...habitForm, text: e.target.value})} />
-              <input required className="w-full py-4 px-6 rounded-2xl bg-slate-900 border border-slate-800 outline-none focus:border-orange-600 transition-colors" placeholder="Âncora (Depois de...)" value={habitForm.anchor} onChange={e => setHabitForm({...habitForm, anchor: e.target.value})} />
-              <input required className="w-full py-4 px-6 rounded-2xl bg-slate-900 border border-slate-800 outline-none focus:border-orange-600 transition-colors" placeholder="Micro-ação (Vou...)" value={habitForm.tinyAction} onChange={e => setHabitForm({...habitForm, tinyAction: e.target.value})} />
-            </div>
-            <button type="submit" className="w-full py-5 bg-orange-600 text-white rounded-3xl font-black uppercase tracking-widest shadow-glow-orange">Solidificar</button>
-          </form>
-        </div>
-      )}
-
-      {showDopamenuForm && (
-        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-xl animate-in fade-in">
-          <form onSubmit={addDopamenuItem} className="w-full max-w-lg bg-[#0a1128] border border-slate-800 rounded-[56px] p-12 space-y-8 shadow-3xl">
-            <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-black uppercase italic text-orange-600">Novo Item de Recarga</h2>
-              <button type="button" onClick={() => setShowDopamenuForm(false)} className="p-2 text-slate-500 hover:text-white"><X/></button>
-            </div>
-            <div className="space-y-6">
-              <input required className="w-full py-4 px-6 rounded-2xl bg-slate-900 border border-slate-800 outline-none focus:border-orange-600 transition-colors" placeholder="Nome da Atividade" value={dopamenuForm.label} onChange={e => setDopamenuForm({...dopamenuForm, label: e.target.value})} />
-              <textarea required className="w-full py-4 px-6 rounded-2xl bg-slate-900 border border-slate-800 outline-none focus:border-orange-600 transition-colors resize-none h-24" placeholder="Descrição curta (por que funciona?)" value={dopamenuForm.description} onChange={e => setDopamenuForm({...dopamenuForm, description: e.target.value})} />
-              <select className="w-full py-4 px-6 rounded-2xl bg-slate-900 border border-slate-800 outline-none focus:border-orange-600 appearance-none transition-colors" value={dopamenuForm.category} onChange={e => setDopamenuForm({...dopamenuForm, category: e.target.value as any})}>
-                <option value="Starter">Entrada (Curto)</option>
-                <option value="Main">Prato Principal (Médio)</option>
-                <option value="Side">Acompanhamento (Paralelo)</option>
-                <option value="Dessert">Sobremesa (Grande)</option>
-              </select>
-            </div>
-            <button type="submit" className="w-full py-5 bg-orange-600 text-white rounded-3xl font-black uppercase tracking-widest shadow-glow-orange">Adicionar ao Menu</button>
+            <button type="submit" className="w-full py-5 bg-orange-600 rounded-3xl font-black uppercase shadow-glow-orange hover:bg-orange-500 transition-all">Solidificar</button>
+            <button type="button" onClick={() => setShowHabitForm(false)} className="w-full text-slate-500 font-bold uppercase text-xs tracking-widest hover:text-white transition-colors">Cancelar</button>
           </form>
         </div>
       )}
 
       {showRecurringForm && (
-        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-xl animate-in fade-in">
-          <form onSubmit={addRecurringTask} className="w-full max-w-lg bg-[#0a1128] border border-slate-800 rounded-[56px] p-12 space-y-8 shadow-3xl">
-            <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-black uppercase italic text-purple-400">Rotina Fixa</h2>
-              <button type="button" onClick={() => setShowRecurringForm(false)} className="p-2 text-slate-500 hover:text-white"><X/></button>
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-xl">
+          <form onSubmit={addRecurringTask} className="w-full max-w-lg bg-[#0a1128] border border-slate-800 rounded-[56px] p-12 space-y-8 shadow-2xl">
+            <h2 className="text-2xl font-black text-purple-400 uppercase">Nova Rotina</h2>
+            <div className="space-y-4">
+              <input required className="w-full py-4 px-6 rounded-2xl bg-slate-900 outline-none border border-slate-800 focus:border-purple-500 transition-colors" placeholder="Tarefa Recorrente" value={recurringForm.text} onChange={e => setRecurringForm({...recurringForm, text: e.target.value})} />
+              <select className="w-full py-4 px-6 rounded-2xl bg-slate-900 outline-none appearance-none border border-slate-800 focus:border-purple-500 transition-colors" value={recurringForm.energy} onChange={e => setRecurringForm({...recurringForm, energy: e.target.value as any})}>
+                <option value="Baixa">Baixa Energia</option><option value="Média">Energia Média</option><option value="Alta">Alta Energia</option>
+              </select>
             </div>
-            <div className="space-y-6">
-              <input required className="w-full py-4 px-6 rounded-2xl bg-slate-900 border border-slate-800 outline-none focus:border-purple-600 transition-colors" placeholder="Tarefa Recorrente" value={recurringForm.text} onChange={e => setRecurringForm({...recurringForm, text: e.target.value})} />
-              <div className="grid grid-cols-2 gap-4">
-                <select className="w-full py-4 px-6 rounded-2xl bg-slate-900 border border-slate-800 outline-none focus:border-purple-600 appearance-none transition-colors" value={recurringForm.frequency} onChange={e => setRecurringForm({...recurringForm, frequency: e.target.value as Frequency})}>
-                  {Object.values(Frequency).map(f => <option key={f} value={f}>{f}</option>)}
-                </select>
-                <select className="w-full py-4 px-6 rounded-2xl bg-slate-900 border border-slate-800 outline-none focus:border-purple-600 appearance-none transition-colors" value={recurringForm.energy} onChange={e => setRecurringForm({...recurringForm, energy: e.target.value as any})}>
-                  <option value="Baixa">Baixa Energia</option>
-                  <option value="Média">Energia Média</option>
-                  <option value="Alta">Alta Energia</option>
-                </select>
-              </div>
+            <button type="submit" className="w-full py-5 bg-purple-600 rounded-3xl font-black uppercase shadow-glow-blue hover:bg-purple-500 transition-all">Ativar Ciclo</button>
+            <button type="button" onClick={() => setShowRecurringForm(false)} className="w-full text-slate-500 font-bold uppercase text-xs tracking-widest hover:text-white transition-colors">Cancelar</button>
+          </form>
+        </div>
+      )}
+
+      {showDopamenuForm && (
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-xl">
+          <form onSubmit={addDopamenuItem} className="w-full max-w-lg bg-[#0a1128] border border-slate-800 rounded-[56px] p-12 space-y-8 shadow-2xl">
+            <h2 className="text-2xl font-black text-orange-600 uppercase">Novo Item</h2>
+            <div className="space-y-4">
+              <input required className="w-full py-4 px-6 rounded-2xl bg-slate-900 outline-none border border-slate-800 focus:border-orange-500 transition-colors" placeholder="Atividade" value={dopamenuForm.label} onChange={e => setDopamenuForm({...dopamenuForm, label: e.target.value})} />
+              <select className="w-full py-4 px-6 rounded-2xl bg-slate-900 outline-none appearance-none border border-slate-800 focus:border-orange-500 transition-colors" value={dopamenuForm.category} onChange={e => setDopamenuForm({...dopamenuForm, category: e.target.value as any})}>
+                <option value="Starter">Starter</option><option value="Main">Main</option><option value="Side">Side</option><option value="Dessert">Dessert</option>
+              </select>
             </div>
-            <button type="submit" className="w-full py-5 bg-purple-600 text-white rounded-3xl font-black uppercase tracking-widest shadow-glow-blue">Ativar Ciclo</button>
+            <button type="submit" className="w-full py-5 bg-orange-600 rounded-3xl font-black uppercase shadow-glow-orange hover:bg-orange-500 transition-all">Adicionar</button>
+            <button type="button" onClick={() => setShowDopamenuForm(false)} className="w-full text-slate-500 font-bold uppercase text-xs tracking-widest hover:text-white transition-colors">Cancelar</button>
           </form>
         </div>
       )}
@@ -1077,60 +911,33 @@ const EnergyBadge: React.FC<{ energy: Task['energy'], onClick?: () => void, high
   return (
     <span 
       onClick={(e) => { e.stopPropagation(); onClick?.(); }}
-      className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest cursor-pointer select-none transition-all hover:scale-110 active:scale-90 ${colors[energy] || colors['Média']}`}
+      className={`px-3 py-1 rounded-full text-[8px] font-black uppercase cursor-pointer select-none transition-all hover:scale-105 active:scale-95 ${colors[energy] || colors['Média']}`}
     >
       {energy}
     </span>
   );
 };
 
-const Neuron = ({ size }: { size: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 9V3"/><path d="M12 15v6"/><path d="M9 12H3"/><path d="M15 12h6"/><path d="m19 5-3.5 3.5"/><path d="m5 19 3.5-3.5"/><path d="m19 19-3.5-3.5"/><path d="m5 5 3.5 3.5"/></svg>
-);
-
 const MatrixQuadrant: React.FC<{ priority: Priority, title: string, color: string, tasks: Task[], onSelect: (t: Task) => void, onDrop: (taskId: string, newPriority: Priority) => void, onUpdateEnergy: (id: string) => void, currentArousal: BrainCapacity }> = ({ priority, title, color, tasks, onSelect, onDrop, onUpdateEnergy, currentArousal }) => {
-  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); e.currentTarget.classList.add('ring-2', 'ring-orange-500', 'ring-offset-2', 'ring-offset-slate-950'); };
-  const handleDragLeave = (e: React.DragEvent) => e.currentTarget.classList.remove('ring-2', 'ring-orange-500', 'ring-offset-2', 'ring-offset-slate-950');
-  const handleOnDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.currentTarget.classList.remove('ring-2', 'ring-orange-500', 'ring-offset-2', 'ring-offset-slate-950');
-    const taskId = e.dataTransfer.getData("taskId");
-    if(taskId) onDrop(taskId, priority);
-  };
-
   const isCompatible = (taskEnergy: Task['energy']) => {
     if (currentArousal === 'Exausto') return taskEnergy === 'Baixa';
     if (currentArousal === 'Neutro') return taskEnergy === 'Baixa' || taskEnergy === 'Média';
-    if (currentArousal === 'Hiperfocado') return true;
     return true;
   };
-
   return (
-    <div onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleOnDrop} className={`p-10 border rounded-[56px] ${color} min-h-[380px] shadow-sm relative transition-all group overflow-hidden`}>
-      <h3 className="font-black uppercase text-[10px] tracking-[0.3em] text-slate-500 mb-8 flex items-center gap-2">
-        <div className={`w-1.5 h-1.5 rounded-full ${priority === Priority.Q1 ? 'bg-red-500' : priority === Priority.Q2 ? 'bg-orange-500' : 'bg-blue-500'}`}></div>
-        {title}
-      </h3>
-      <div className="space-y-4 max-h-[280px] overflow-y-auto pr-3">
+    <div onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); const tid = e.dataTransfer.getData("taskId"); if(tid) onDrop(tid, priority); }} className={`p-10 border rounded-[56px] ${color} min-h-[380px] transition-all group overflow-hidden shadow-sm hover:shadow-md`}>
+      <h3 className="font-black uppercase text-[10px] tracking-[0.3em] text-slate-500 mb-8">{title}</h3>
+      <div className="space-y-4">
         {tasks.map(t => {
           const compatible = isCompatible(t.energy);
           return (
-            <div 
-              key={t.id} 
-              draggable 
-              onDragStart={(e) => { e.dataTransfer.setData("taskId", t.id); e.currentTarget.classList.add('opacity-40'); }} 
-              onDragEnd={(e) => e.currentTarget.classList.remove('opacity-40')} 
-              className={`p-6 bg-slate-900/80 border rounded-3xl flex justify-between items-center group cursor-grab hover:border-slate-700 transition-all shadow-lg ${compatible ? 'border-orange-500/30 scale-[1.02] shadow-orange-950/20' : 'border-slate-800 opacity-30 grayscale'}`}
-            >
-              <span onClick={() => onSelect(t)} className="text-sm font-black truncate flex-1">{t.text}</span>
-              <div className="flex items-center gap-2">
-                <EnergyBadge energy={t.energy} highlighted={compatible} onClick={() => onUpdateEnergy(t.id)} />
-                <button onClick={() => onSelect(t)} className="opacity-0 group-hover:opacity-100 p-2 bg-orange-600 text-white rounded-xl transition-all"><Target size={16}/></button>
-              </div>
+            <div key={t.id} draggable onDragStart={e => e.dataTransfer.setData("taskId", t.id)} className={`p-6 bg-slate-900 border rounded-3xl flex justify-between items-center group cursor-grab shadow-lg transition-all ${compatible ? 'border-orange-500/30 hover:border-orange-500/60' : 'opacity-30 grayscale hover:grayscale-0 hover:opacity-100'}`}>
+              <span onClick={() => onSelect(t)} className="text-sm font-black truncate flex-1 hover:text-orange-500 transition-colors">{t.text}</span>
+              <EnergyBadge energy={t.energy} highlighted={compatible} onClick={() => onUpdateEnergy(t.id)} />
             </div>
           );
         })}
-        {tasks.length === 0 && <div className="h-40 flex items-center justify-center border-2 border-dashed border-slate-800/30 rounded-3xl"><p className="text-[9px] font-black text-slate-700 uppercase">Vazio</p></div>}
+        {tasks.length === 0 && <p className="text-center py-20 text-[9px] font-black text-slate-700 uppercase tracking-widest opacity-30">Livre de pendências</p>}
       </div>
     </div>
   );
