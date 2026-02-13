@@ -40,6 +40,13 @@ const INITIAL_DOPAMENU: DopamenuItem[] = [
   { id: '6', category: 'Dessert', label: 'Assistir 1 Episódio', description: 'Recompensa final após grandes blocos.' },
 ];
 
+interface DailyMission {
+  id: number;
+  text: string;
+  minutes: number;
+  completed: boolean;
+}
+
 const TUTORIAL_STEPS = [
   {
     title: "Bem-vindo à sua Segunda Mente",
@@ -78,23 +85,27 @@ const SynapseLogo = ({ className = "" }: { className?: string }) => (
 );
 
 const SparkleParticles: React.FC = () => {
-  const particles = Array.from({ length: 12 });
+  const particles = Array.from({ length: 24 });
   return (
     <div className="absolute inset-0 pointer-events-none flex items-center justify-center overflow-visible z-50">
       {particles.map((_, i) => {
-        const angle = (i / particles.length) * Math.PI * 2;
-        const velocity = 40 + Math.random() * 60;
+        const angle = (i / particles.length) * Math.PI * 2 + (Math.random() * 0.5);
+        const velocity = 80 + Math.random() * 100;
         const dx = Math.cos(angle) * velocity;
         const dy = Math.sin(angle) * velocity;
+        const size = 3 + Math.random() * 6;
         return (
           <div
             key={i}
-            className="absolute w-2 h-2 rounded-full animate-particle shadow-lg"
+            className="absolute rounded-full animate-particle shadow-lg"
             style={{
+              width: `${size}px`,
+              height: `${size}px`,
               backgroundColor: i % 2 === 0 ? '#f97316' : '#facc15',
               '--dx': `${dx}px`,
               '--dy': `${dy}px`,
-              animationDelay: `${Math.random() * 0.1}s`
+              animationDelay: `${Math.random() * 0.15}s`,
+              transform: `rotate(${Math.random() * 360}deg)`
             } as any}
           />
         );
@@ -126,6 +137,13 @@ const App: React.FC = () => {
   const [dopamenuItems, setDopamenuItems] = useState<DopamenuItem[]>(INITIAL_DOPAMENU);
   const [sparkleTaskId, setSparkleTaskId] = useState<string | null>(null);
   
+  // Daily Missions State
+  const [dailyMissions, setDailyMissions] = useState<DailyMission[]>([
+    { id: 1, text: '', minutes: 30, completed: false },
+    { id: 2, text: '', minutes: 30, completed: false },
+    { id: 3, text: '', minutes: 30, completed: false }
+  ]);
+
   // Tutorial State
   const [tutorialStep, setTutorialStep] = useState<number | null>(null);
 
@@ -141,7 +159,7 @@ const App: React.FC = () => {
 
   // Persistence Logic
   useEffect(() => {
-    const localData = localStorage.getItem('neuro_executor_data_v2');
+    const localData = localStorage.getItem('neuro_executor_data_v3');
     if (localData) {
       const parsed = JSON.parse(localData);
       setTasks(parsed.tasks || []);
@@ -149,6 +167,7 @@ const App: React.FC = () => {
       setHabits(parsed.habits || []);
       setPoints(parsed.points || 0);
       setDopamenuItems(parsed.dopamenuItems || INITIAL_DOPAMENU);
+      if (parsed.dailyMissions) setDailyMissions(parsed.dailyMissions);
     }
     setIsDataLoaded(true);
     if (!localStorage.getItem('neuro-tutorial-seen')) {
@@ -158,9 +177,9 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!isDataLoaded) return;
-    const dataToSave = { tasks, recurringTasks, habits, points, dopamenuItems };
-    localStorage.setItem('neuro_executor_data_v2', JSON.stringify(dataToSave));
-  }, [tasks, recurringTasks, habits, points, dopamenuItems, isDataLoaded]);
+    const dataToSave = { tasks, recurringTasks, habits, points, dopamenuItems, dailyMissions };
+    localStorage.setItem('neuro_executor_data_v3', JSON.stringify(dataToSave));
+  }, [tasks, recurringTasks, habits, points, dopamenuItems, dailyMissions, isDataLoaded]);
 
   // UI Flow States
   const [isOptimizing, setIsOptimizing] = useState(false);
@@ -245,6 +264,16 @@ const App: React.FC = () => {
     }));
   };
 
+  const updateTaskEnergy = (id: string) => {
+    setTasks(prev => prev.map(t => {
+      if (t.id === id) {
+        const nextEnergy: Task['energy'] = t.energy === 'Baixa' ? 'Média' : t.energy === 'Média' ? 'Alta' : 'Baixa';
+        return { ...t, energy: nextEnergy };
+      }
+      return t;
+    }));
+  };
+
   const toggleRecurringTask = (id: string) => {
     const today = new Date().toISOString().split('T')[0];
     let justCompleted = false;
@@ -282,6 +311,19 @@ const App: React.FC = () => {
         };
       }
       return h;
+    }));
+  };
+
+  const updateDailyMission = (id: number, updates: Partial<DailyMission>) => {
+    setDailyMissions(prev => prev.map(m => {
+      if (m.id === id) {
+        if (updates.completed && !m.completed) {
+          setPoints(p => p + 100); // Grande recompensa para missão diária
+          playAudio(SOUNDS.TASK_COMPLETE);
+        }
+        return { ...m, ...updates };
+      }
+      return m;
     }));
   };
 
@@ -395,13 +437,13 @@ const App: React.FC = () => {
           <div className="space-y-3">
             <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Capacidade Atual</p>
             <div className="flex gap-2">
-              <button onClick={() => setCurrentArousal('Exausto')} className={`flex-1 p-3 rounded-2xl border flex flex-col items-center gap-1 transition-all ${currentArousal === 'Exausto' ? 'bg-blue-600/20 border-blue-500 text-blue-400' : 'border-slate-800 opacity-40'}`}>
+              <button onClick={() => setCurrentArousal('Exausto')} className={`flex-1 p-3 rounded-2xl border flex flex-col items-center gap-1 transition-all ${currentArousal === 'Exausto' ? 'bg-blue-600/20 border-blue-500 text-blue-400 shadow-glow-blue animate-pulse-orange' : 'border-slate-800 opacity-40'}`}>
                 <BatteryLow size={16}/><span className="text-[8px] font-black uppercase">Exausto</span>
               </button>
-              <button onClick={() => setCurrentArousal('Neutro')} className={`flex-1 p-3 rounded-2xl border flex flex-col items-center gap-1 transition-all ${currentArousal === 'Neutro' ? 'bg-orange-600/20 border-orange-500 text-orange-400' : 'border-slate-800 opacity-40'}`}>
+              <button onClick={() => setCurrentArousal('Neutro')} className={`flex-1 p-3 rounded-2xl border flex flex-col items-center gap-1 transition-all ${currentArousal === 'Neutro' ? 'bg-orange-600/20 border-orange-500 text-orange-400 shadow-glow-orange animate-pulse-orange' : 'border-slate-800 opacity-40'}`}>
                 <BatteryMedium size={16}/><span className="text-[8px] font-black uppercase">Neutro</span>
               </button>
-              <button onClick={() => setCurrentArousal('Hiperfocado')} className={`flex-1 p-3 rounded-2xl border flex flex-col items-center gap-1 transition-all ${currentArousal === 'Hiperfocado' ? 'bg-purple-600/20 border-purple-500 text-purple-400' : 'border-slate-800 opacity-40'}`}>
+              <button onClick={() => setCurrentArousal('Hiperfocado')} className={`flex-1 p-3 rounded-2xl border flex flex-col items-center gap-1 transition-all ${currentArousal === 'Hiperfocado' ? 'bg-purple-600/20 border-purple-500 text-purple-400 shadow-glow-purple animate-pulse-orange' : 'border-slate-800 opacity-40'}`}>
                 <BatteryFull size={16}/><span className="text-[8px] font-black uppercase">Pico</span>
               </button>
             </div>
@@ -548,6 +590,7 @@ const App: React.FC = () => {
           {activeTab === 'execute' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-700">
               <div className="lg:col-span-2 space-y-8">
+                {/* Timer Area */}
                 <div className="p-12 text-center border rounded-[48px] bg-slate-900/60 border-slate-800 relative overflow-hidden shadow-2xl group">
                   <div className="absolute top-0 left-0 w-full h-1 bg-slate-800 overflow-hidden">
                     <div className="h-full bg-orange-600 transition-all duration-1000" style={{ width: `${(timeLeft / (90 * 60)) * 100}%` }}></div>
@@ -562,7 +605,60 @@ const App: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="p-10 border rounded-[48px] bg-slate-900/60 border-slate-800 min-h-[350px] shadow-xl backdrop-blur-sm">
+                {/* Protocolo de 3 Missões Card */}
+                <div className="p-10 border rounded-[48px] bg-slate-900/60 border-slate-800 shadow-xl backdrop-blur-sm space-y-6">
+                  <div className="flex justify-between items-center px-2">
+                    <h3 className="text-[11px] font-black uppercase text-orange-500 tracking-[0.3em] flex items-center gap-2">
+                      <Target size={14} /> Protocolo: 3 Missões do Dia
+                    </h3>
+                    <div className="flex gap-1">
+                      {dailyMissions.map(m => (
+                        <div key={m.id} className={`w-2 h-2 rounded-full ${m.completed ? 'bg-orange-500 shadow-glow-orange' : 'bg-slate-800'}`}></div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    {dailyMissions.map((mission) => (
+                      <div key={mission.id} className={`p-6 rounded-[32px] border transition-all flex items-center gap-6 ${mission.completed ? 'bg-orange-600/5 border-orange-500/20 opacity-60' : 'bg-slate-800/30 border-slate-700/30 hover:border-orange-500/30'}`}>
+                        <button 
+                          onClick={() => updateDailyMission(mission.id, { completed: !mission.completed })}
+                          className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all ${mission.completed ? 'bg-orange-600 text-white' : 'bg-slate-900 border border-slate-700 text-transparent hover:text-slate-600'}`}
+                        >
+                          <Check size={20} strokeWidth={4} />
+                        </button>
+                        
+                        <input 
+                          type="text" 
+                          placeholder={`Missão #${mission.id}...`}
+                          className={`flex-1 bg-transparent border-none outline-none font-bold text-lg placeholder:text-slate-700 ${mission.completed ? 'line-through text-slate-500' : 'text-white'}`}
+                          value={mission.text}
+                          onChange={(e) => updateDailyMission(mission.id, { text: e.target.value })}
+                        />
+
+                        <div className="flex items-center gap-2">
+                          {[15, 30, 45, 60].map((mins) => (
+                            <button 
+                              key={mins}
+                              onClick={() => {
+                                updateDailyMission(mission.id, { minutes: mins });
+                                setTimeLeft(mins * 60);
+                                setIsTimerActive(false);
+                              }}
+                              className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase transition-all ${mission.minutes === mins ? 'bg-orange-600/20 text-orange-500 border border-orange-500/30' : 'bg-slate-900 border border-slate-800 text-slate-600 hover:text-slate-400'}`}
+                            >
+                              {mins}m
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[9px] text-center font-bold text-slate-600 uppercase tracking-widest">Timebox: Clique em um tempo para carregar o Timer</p>
+                </div>
+
+                {/* Selected Task Details */}
+                <div className="p-10 border rounded-[48px] bg-slate-900/60 border-slate-800 min-h-[250px] shadow-xl backdrop-blur-sm">
                   {selectedTask ? (
                     <div className="space-y-8 animate-in slide-in-from-bottom duration-300">
                       <div className="flex justify-between items-start">
@@ -570,7 +666,7 @@ const App: React.FC = () => {
                           <h2 className={`text-4xl font-black ${selectedTask.completed ? 'line-through opacity-20' : ''}`}>{selectedTask.text}</h2>
                           <div className="flex gap-2">
                             <span className="px-3 py-1 bg-orange-600/20 text-orange-500 rounded-full text-[8px] font-black uppercase tracking-widest">{selectedTask.priority}</span>
-                            <EnergyBadge energy={selectedTask.energy} />
+                            <EnergyBadge energy={selectedTask.energy} onClick={() => updateTaskEnergy(selectedTask.id)} />
                           </div>
                         </div>
                         <button onClick={() => setSelectedTask(null)} className="p-2 text-slate-500 hover:text-white transition-colors"><X /></button>
@@ -600,9 +696,9 @@ const App: React.FC = () => {
                       </button>
                     </div>
                   ) : (
-                    <div className="py-24 text-center opacity-10 flex flex-col items-center gap-6">
-                      <Target size={100}/>
-                      <p className="text-2xl font-black uppercase italic tracking-tighter">Próximo Alvo Neural</p>
+                    <div className="py-12 text-center opacity-10 flex flex-col items-center gap-6">
+                      <Target size={60}/>
+                      <p className="text-lg font-black uppercase italic tracking-tighter">Selecione da Fila para Detalhar</p>
                     </div>
                   )}
                 </div>
@@ -694,10 +790,10 @@ const App: React.FC = () => {
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <MatrixQuadrant priority={Priority.Q1} title="Q1: Crítico e Urgente" color="bg-red-600/5 border-red-500/20" tasks={dayTasks.filter(t => t.priority === Priority.Q1 && !t.completed)} onSelect={(t) => { setSelectedTask(t); setActiveTab('execute'); }} onDrop={handleTaskDrop} />
-                <MatrixQuadrant priority={Priority.Q2} title="Q2: Importante/Estratégico" color="bg-orange-600/5 border-orange-500/20" tasks={dayTasks.filter(t => t.priority === Priority.Q2 && !t.completed)} onSelect={(t) => { setSelectedTask(t); setActiveTab('execute'); }} onDrop={handleTaskDrop} />
-                <MatrixQuadrant priority={Priority.Q3} title="Q3: Interrupções/Delegar" color="bg-blue-600/5 border-blue-500/20" tasks={dayTasks.filter(t => t.priority === Priority.Q3 && !t.completed)} onSelect={(t) => { setSelectedTask(t); setActiveTab('execute'); }} onDrop={handleTaskDrop} />
-                <MatrixQuadrant priority={Priority.Q4} title="Q4: Eliminar Distrações" color="bg-slate-800/20 border-slate-700/50" tasks={dayTasks.filter(t => t.priority === Priority.Q4 && !t.completed)} onSelect={(t) => { setSelectedTask(t); setActiveTab('execute'); }} onDrop={handleTaskDrop} />
+                <MatrixQuadrant priority={Priority.Q1} title="Q1: Crítico e Urgente" color="bg-red-600/5 border-red-500/20" tasks={dayTasks.filter(t => t.priority === Priority.Q1 && !t.completed)} onSelect={(t) => { setSelectedTask(t); setActiveTab('execute'); }} onDrop={handleTaskDrop} onUpdateEnergy={updateTaskEnergy} currentArousal={currentArousal} />
+                <MatrixQuadrant priority={Priority.Q2} title="Q2: Importante/Estratégico" color="bg-orange-600/5 border-orange-500/20" tasks={dayTasks.filter(t => t.priority === Priority.Q2 && !t.completed)} onSelect={(t) => { setSelectedTask(t); setActiveTab('execute'); }} onDrop={handleTaskDrop} onUpdateEnergy={updateTaskEnergy} currentArousal={currentArousal} />
+                <MatrixQuadrant priority={Priority.Q3} title="Q3: Interrupções/Delegar" color="bg-blue-600/5 border-blue-500/20" tasks={dayTasks.filter(t => t.priority === Priority.Q3 && !t.completed)} onSelect={(t) => { setSelectedTask(t); setActiveTab('execute'); }} onDrop={handleTaskDrop} onUpdateEnergy={updateTaskEnergy} currentArousal={currentArousal} />
+                <MatrixQuadrant priority={Priority.Q4} title="Q4: Eliminar Distrações" color="bg-slate-800/20 border-slate-700/50" tasks={dayTasks.filter(t => t.priority === Priority.Q4 && !t.completed)} onSelect={(t) => { setSelectedTask(t); setActiveTab('execute'); }} onDrop={handleTaskDrop} onUpdateEnergy={updateTaskEnergy} currentArousal={currentArousal} />
               </div>
             </div>
           )}
@@ -972,16 +1068,27 @@ const NavButton: React.FC<{ icon: React.ReactNode, label: string, active: boolea
   </button>
 );
 
-const EnergyBadge: React.FC<{ energy: Task['energy'] }> = ({ energy }) => {
-  const colors = { 'Baixa': 'bg-green-600/20 text-green-500', 'Média': 'bg-yellow-600/20 text-yellow-500', 'Alta': 'bg-red-600/20 text-red-500' };
-  return <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${colors[energy] || colors['Média']}`}>{energy}</span>;
+const EnergyBadge: React.FC<{ energy: Task['energy'], onClick?: () => void, highlighted?: boolean }> = ({ energy, onClick, highlighted }) => {
+  const colors = { 
+    'Baixa': highlighted ? 'bg-green-600 text-white shadow-glow-success' : 'bg-green-600/20 text-green-500', 
+    'Média': highlighted ? 'bg-yellow-600 text-white shadow-glow-orange' : 'bg-yellow-600/20 text-yellow-500', 
+    'Alta': highlighted ? 'bg-red-600 text-white shadow-glow-red' : 'bg-red-600/20 text-red-500' 
+  };
+  return (
+    <span 
+      onClick={(e) => { e.stopPropagation(); onClick?.(); }}
+      className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest cursor-pointer select-none transition-all hover:scale-110 active:scale-90 ${colors[energy] || colors['Média']}`}
+    >
+      {energy}
+    </span>
+  );
 };
 
 const Neuron = ({ size }: { size: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 9V3"/><path d="M12 15v6"/><path d="M9 12H3"/><path d="M15 12h6"/><path d="m19 5-3.5 3.5"/><path d="m5 19 3.5-3.5"/><path d="m19 19-3.5-3.5"/><path d="m5 5 3.5 3.5"/></svg>
 );
 
-const MatrixQuadrant: React.FC<{ priority: Priority, title: string, color: string, tasks: Task[], onSelect: (t: Task) => void, onDrop: (taskId: string, newPriority: Priority) => void }> = ({ priority, title, color, tasks, onSelect, onDrop }) => {
+const MatrixQuadrant: React.FC<{ priority: Priority, title: string, color: string, tasks: Task[], onSelect: (t: Task) => void, onDrop: (taskId: string, newPriority: Priority) => void, onUpdateEnergy: (id: string) => void, currentArousal: BrainCapacity }> = ({ priority, title, color, tasks, onSelect, onDrop, onUpdateEnergy, currentArousal }) => {
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); e.currentTarget.classList.add('ring-2', 'ring-orange-500', 'ring-offset-2', 'ring-offset-slate-950'); };
   const handleDragLeave = (e: React.DragEvent) => e.currentTarget.classList.remove('ring-2', 'ring-orange-500', 'ring-offset-2', 'ring-offset-slate-950');
   const handleOnDrop = (e: React.DragEvent) => {
@@ -990,6 +1097,14 @@ const MatrixQuadrant: React.FC<{ priority: Priority, title: string, color: strin
     const taskId = e.dataTransfer.getData("taskId");
     if(taskId) onDrop(taskId, priority);
   };
+
+  const isCompatible = (taskEnergy: Task['energy']) => {
+    if (currentArousal === 'Exausto') return taskEnergy === 'Baixa';
+    if (currentArousal === 'Neutro') return taskEnergy === 'Baixa' || taskEnergy === 'Média';
+    if (currentArousal === 'Hiperfocado') return true;
+    return true;
+  };
+
   return (
     <div onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleOnDrop} className={`p-10 border rounded-[56px] ${color} min-h-[380px] shadow-sm relative transition-all group overflow-hidden`}>
       <h3 className="font-black uppercase text-[10px] tracking-[0.3em] text-slate-500 mb-8 flex items-center gap-2">
@@ -997,15 +1112,24 @@ const MatrixQuadrant: React.FC<{ priority: Priority, title: string, color: strin
         {title}
       </h3>
       <div className="space-y-4 max-h-[280px] overflow-y-auto pr-3">
-        {tasks.map(t => (
-          <div key={t.id} draggable onDragStart={(e) => { e.dataTransfer.setData("taskId", t.id); e.currentTarget.classList.add('opacity-40'); }} onDragEnd={(e) => e.currentTarget.classList.remove('opacity-40')} className="p-6 bg-slate-900/80 border border-slate-800 rounded-3xl flex justify-between items-center group cursor-grab hover:border-slate-700 transition-all shadow-lg">
-            <span onClick={() => onSelect(t)} className="text-sm font-black truncate flex-1">{t.text}</span>
-            <div className="flex items-center gap-2">
-              <EnergyBadge energy={t.energy} />
-              <button onClick={() => onSelect(t)} className="opacity-0 group-hover:opacity-100 p-2 bg-orange-600 text-white rounded-xl transition-all"><Target size={16}/></button>
+        {tasks.map(t => {
+          const compatible = isCompatible(t.energy);
+          return (
+            <div 
+              key={t.id} 
+              draggable 
+              onDragStart={(e) => { e.dataTransfer.setData("taskId", t.id); e.currentTarget.classList.add('opacity-40'); }} 
+              onDragEnd={(e) => e.currentTarget.classList.remove('opacity-40')} 
+              className={`p-6 bg-slate-900/80 border rounded-3xl flex justify-between items-center group cursor-grab hover:border-slate-700 transition-all shadow-lg ${compatible ? 'border-orange-500/30 scale-[1.02] shadow-orange-950/20' : 'border-slate-800 opacity-30 grayscale'}`}
+            >
+              <span onClick={() => onSelect(t)} className="text-sm font-black truncate flex-1">{t.text}</span>
+              <div className="flex items-center gap-2">
+                <EnergyBadge energy={t.energy} highlighted={compatible} onClick={() => onUpdateEnergy(t.id)} />
+                <button onClick={() => onSelect(t)} className="opacity-0 group-hover:opacity-100 p-2 bg-orange-600 text-white rounded-xl transition-all"><Target size={16}/></button>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
         {tasks.length === 0 && <div className="h-40 flex items-center justify-center border-2 border-dashed border-slate-800/30 rounded-3xl"><p className="text-[9px] font-black text-slate-700 uppercase">Vazio</p></div>}
       </div>
     </div>
