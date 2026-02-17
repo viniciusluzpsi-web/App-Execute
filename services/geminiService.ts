@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { Priority, Task, PanicSolution, DopamenuItem, BrainCapacity } from "../types";
+import { Priority, Task, DopamenuItem, BrainCapacity } from "../types";
 
 const modelName = 'gemini-3-pro-preview';
 
@@ -139,40 +139,6 @@ export const geminiService = {
     } catch (error: any) {
       console.error("Erro ao decompor tarefa:", error);
       return ["Inicie com a menor ação possível.", "Prepare seu ambiente.", "Foque por 5 minutos."];
-    }
-  },
-
-  async rescueTask(taskText: string, obstacle: string): Promise<PanicSolution> {
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const response = await ai.models.generateContent({
-        model: modelName,
-        contents: `O usuário está paralisado na tarefa "${taskText}" pelo motivo: "${obstacle}". 
-        Forneça um diagnóstico neuropsicológico e um protocolo de resgate imediato.`,
-        config: {
-          systemInstruction: SYSTEM_INSTRUCTION,
-          maxOutputTokens: 12000,
-          thinkingConfig: { thinkingBudget: 8000 }, 
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              diagnosis: { type: Type.STRING },
-              steps: { type: Type.ARRAY, items: { type: Type.STRING } },
-              encouragement: { type: Type.STRING }
-            },
-            required: ['diagnosis', 'steps', 'encouragement']
-          }
-        }
-      });
-      return JSON.parse(response.text || '{}');
-    } catch (error: any) {
-      console.error("Erro no resgate neural:", error);
-      return {
-        diagnosis: "Sobrecarga de processamento.",
-        steps: ["Afaste-se da tela por 2 minutos.", "Beba água gelada.", "Escreva apenas a primeira palavra da tarefa."],
-        encouragement: "O progresso é melhor que a perfeição."
-      };
     }
   },
 

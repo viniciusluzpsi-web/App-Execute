@@ -93,9 +93,3 @@ export interface Achievement {
   icon: string;
   unlockedAt: number | null;
 }
-
-export interface PanicSolution {
-  diagnosis: string;
-  steps: string[];
-  encouragement: string;
-}

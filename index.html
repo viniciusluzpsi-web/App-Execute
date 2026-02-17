@@ -9,69 +9,89 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
         :root {
+            /* DARK THEME (Default) */
+            --bg-body: #020617;
+            --bg-sidebar: #0a1128;
+            --bg-card: #0f172a;
+            --bg-card-hover: #1e293b;
+            --bg-input: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border-ui: #1e293b;
             --accent-primary: #f97316;
-            --accent-secondary: #ef4444;
+            --shadow-glow: rgba(249, 115, 22, 0.2);
+            --timer-bg: #0f172a;
         }
         
-        /* Ocultar scrollbar mantendo funcionalidade */
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-        /* Temas de Sotaque (Accents) */
-        .theme-ocean { --accent-primary: #06b6d4; --accent-secondary: #3b82f6; }
-        .theme-ocean .text-orange-600, .theme-ocean .text-orange-500 { color: #06b6d4; }
-        .theme-ocean .bg-orange-600 { background-color: #06b6d4; }
-        .theme-ocean .shadow-glow-orange { box-shadow: 0 0 20px rgba(6, 182, 212, 0.4); }
-
-        .theme-forest { --accent-primary: #10b981; --accent-secondary: #059669; }
-        .theme-forest .text-orange-600, .theme-forest .text-orange-500 { color: #10b981; }
-        .theme-forest .bg-orange-600 { background-color: #10b981; }
-        .theme-forest .shadow-glow-orange { box-shadow: 0 0 20px rgba(16, 185, 129, 0.4); }
-
-        .theme-cyber { --accent-primary: #ec4899; --accent-secondary: #8b5cf6; }
-        .theme-cyber .text-orange-600, .theme-cyber .text-orange-500 { color: #ec4899; }
-        .theme-cyber .bg-orange-600 { background-color: #ec4899; }
-        .theme-cyber .shadow-glow-orange { box-shadow: 0 0 20px rgba(236, 72, 153, 0.4); }
-
-        /* MODO CLARO - OVERRIDES */
+        /* LIGHT MODE - CLEAN & HIGH CONTRAST */
         body.light-mode {
-            background-color: #f8fafc;
-            color: #0f172a;
+            --bg-body: #f1f5f9;
+            --bg-sidebar: #ffffff;
+            --bg-card: #ffffff;
+            --bg-card-hover: #f8fafc;
+            --bg-input: #f1f5f9;
+            --text-main: #0f172a;
+            --text-muted: #475569;
+            --border-ui: #cbd5e1;
+            --shadow-glow: rgba(249, 115, 22, 0.1);
+            --timer-bg: #ffffff;
         }
 
-        .light-mode .bg-\[\#020617\] { background-color: #f8fafc; }
-        .light-mode .bg-\[\#0a1128\] { background-color: #ffffff; border-color: #e2e8f0; }
-        .light-mode .bg-\[\#0a1128\]\/95 { background-color: rgba(255, 255, 255, 0.95); }
-        
-        .light-mode .bg-slate-900, 
-        .light-mode .bg-slate-900\/60, 
-        .light-mode .bg-slate-800\/20,
-        .light-mode .bg-slate-800\/30,
-        .light-mode .bg-slate-800\/50 {
-            background-color: #ffffff;
-            border-color: #e2e8f0;
-            color: #1e293b;
+        body { 
+            font-family: 'Inter', sans-serif; 
+            transition: background 0.3s ease, color 0.3s ease; 
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            -webkit-tap-highlight-color: transparent;
         }
 
-        .light-mode .text-white, .light-mode .text-slate-200, .light-mode .text-slate-300 { color: #1e293b; }
-        .light-mode .text-slate-400, .light-mode .text-slate-500, .light-mode .text-slate-600 { color: #64748b; }
-        .light-mode .border-slate-800, .light-mode .border-slate-700 { border-color: #e2e8f0; }
-        .light-mode .bg-slate-950\/90 { background-color: rgba(255, 255, 255, 0.9); }
+        /* Utility classes using variables */
+        .theme-bg-body { background-color: var(--bg-body); }
+        .theme-bg-sidebar { background-color: var(--bg-sidebar); border-color: var(--border-ui); }
+        .theme-bg-card { background-color: var(--bg-card); border-color: var(--border-ui); }
+        .theme-bg-input { background-color: var(--bg-input); border-color: var(--border-ui); }
+        .theme-text-main { color: var(--text-main); }
+        .theme-text-muted { color: var(--text-muted); }
+        .theme-border { border-color: var(--border-ui); }
 
-        body { font-family: 'Inter', sans-serif; transition: background 0.5s ease, color 0.5s ease; -webkit-tap-highlight-color: transparent; }
-        .font-mono { font-family: 'JetBrains+Mono', monospace; }
-        
+        /* Animation refinements */
         @keyframes glow-orange {
-            0%, 100% { box-shadow: 0 0 10px rgba(249, 115, 22, 0.1); }
-            50% { box-shadow: 0 0 25px rgba(249, 115, 22, 0.3); }
+            0%, 100% { box-shadow: 0 0 15px rgba(249, 115, 22, 0.1); }
+            50% { box-shadow: 0 0 30px rgba(249, 115, 22, 0.3); }
         }
-        .shadow-glow-orange { animation: glow-orange 3s ease-in-out infinite; }
+        .shadow-glow-orange { animation: glow-orange 4s ease-in-out infinite; }
 
         @keyframes synapse-pulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.7; transform: scale(1.05); }
+            0%, 100% { transform: scale(1); filter: brightness(1); }
+            50% { transform: scale(1.1); filter: brightness(1.2); }
         }
         .synapse-core { animation: synapse-pulse 4s ease-in-out infinite; }
+
+        /* Fixes for specific components in light mode */
+        .light-mode .bg-slate-900, 
+        .light-mode .bg-slate-950,
+        .light-mode .bg-[#0a1128],
+        .light-mode .bg-slate-900\/50,
+        .light-mode .bg-slate-900\/40,
+        .light-mode .bg-[#0a1128]\/95 { 
+            background-color: var(--bg-card) !important;
+            border-color: var(--border-ui) !important;
+        }
+        
+        .light-mode .text-slate-100,
+        .light-mode .text-slate-200,
+        .light-mode .text-slate-300 { color: var(--text-main) !important; }
+        
+        .light-mode .text-slate-400,
+        .light-mode .text-slate-500 { color: var(--text-muted) !important; }
+
+        .light-mode .bg-slate-800 { background-color: var(--bg-input) !important; }
+        .light-mode .border-slate-800, .light-mode .border-slate-700 { border-color: var(--border-ui) !important; }
+        
+        .light-mode .shadow-xl { box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05); }
     </style>
 <script type="importmap">
 {
@@ -86,7 +106,7 @@
 </script>
 <link rel="stylesheet" href="/index.css">
 </head>
-<body class="bg-[#020617] text-white antialiased overflow-x-hidden">
+<body class="antialiased overflow-x-hidden">
     <div id="root"></div>
 <script type="module" src="/index.tsx"></script>
 </body>
