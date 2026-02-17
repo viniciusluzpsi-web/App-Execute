@@ -13,8 +13,8 @@ import {
   Cloud, CloudOff, CloudSync, Mail, Rocket, BrainCog, StickyNote, ListChecks, Music, Activity, Star as StarIcon, Cpu,
   ChefHat, IceCream, Pizza, Cookie, ShieldAlert, ZapOff as ZapIcon, FastForward, Filter, Settings, Fingerprint,
   Sunrise, Sunset, MoonStar, Briefcase, Heart, Edit3, Sparkle, Swords, Gem, Lock, Unlock, Zap as ZapBolt,
-  Zap as SparkleIcon, History, Fingerprint as IdentityIcon, Send, Brain as BrainIcon, FileText, Layers,
-  Loader, RefreshCcw, Info as InfoIcon
+  Zap as SparkleIcon, History, Fingerprint as IdentityIcon, Send, Brain as BrainIcon, LifeBuoy, FileText, Layers,
+  Loader, RefreshCcw, Info as InfoIcon, ArrowUpRight, BookOpenCheck
 } from 'lucide-react';
 import { Priority, Task, Habit, RecurringTask, Frequency, BrainCapacity, DopamenuItem, DayPeriod, Upgrade, Achievement, TimeboxEntry } from './types';
 import { geminiService } from './services/geminiService';
@@ -38,40 +38,80 @@ const PERIOD_LABELS: Record<DayPeriod, string> = {
 
 const WEEK_DAYS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
 
-const TUTORIAL_DATA: Record<string, { title: string, steps: { target: string, text: string, concept: string }[] }> = {
+const TUTORIAL_DATA: Record<string, { title: string, steps: { text: string, concept: string, actionTip: string }[] }> = {
   capture: {
     title: "Sincronismo de Captura",
     steps: [
-      { target: "input", text: "Escreva qualquer pensamento aqui. Não se preocupe com a organização ainda.", concept: "Externalização RAM: Tirar a ideia da cabeça libera recursos do córtex pré-frontal para o processamento, não apenas para o armazenamento." },
-      { target: "ia-refinement", text: "Nossa IA processará sua intenção e definirá automaticamente a prioridade e os passos iniciais.", concept: "Andaimação Neural: Reduzimos a 'fricção de início' ao decompor objetivos vagos em ações concretas." }
+      { 
+        text: "Escreva qualquer pensamento ou tarefa aqui. Não pare para organizar agora.", 
+        concept: "Efeito Zeigarnik: O cérebro gasta energia mantendo 'lembretes' de tarefas inacabadas. Ao escrever, você encerra esse loop de processamento no córtex pré-frontal.",
+        actionTip: "Use o campo de entrada para externalizar tudo o que 'pesa' na sua mente no momento."
+      },
+      { 
+        text: "Nossa IA processará sua intenção para sugerir prioridade e micro-passos.", 
+        concept: "Andaimação Neural: O cérebro resiste a tarefas vagas (ex: 'Estudar'). A IA quebra a resistência inicial ao transformar o vago em concreto.",
+        actionTip: "Observe como a IA gera subtarefas ridiculamente fáceis para 'hackear' sua procrastinação."
+      }
     ]
   },
   execute: {
-    title: "Estado de Fluxo",
+    title: "Estado de Fluxo Assistido",
     steps: [
-      { target: "timer", text: "Trabalhe em blocos de 90 minutos para respeitar seus Ciclos Ultradianos.", concept: "Ritmo Ultradiano: O cérebro opera em ciclos de alta performance de ~90 min seguidos de 15-20 min de fadiga." },
-      { target: "timebox", text: "Planeje seu dia em blocos de tempo para evitar o cansaço da decisão contínua.", concept: "Timeboxing: Alocar períodos específicos para tarefas reduz a carga cognitiva de 'o que fazer agora'." },
-      { target: "energy-match", text: "O sistema destaca tarefas que combinam com seu nível de energia atual.", concept: "Gestão de Bio-Energia: Executar tarefas de alta carga com baixa energia causa 'burnout' cognitivo precoce." }
+      { 
+        text: "Trabalhe em blocos de 90 minutos usando o Timer de Fluxo.", 
+        concept: "Ciclos Ultradianos: Nosso cérebro opera em picos de 90 min. Ignorar isso causa fadiga acumulada e perda de plasticidade sináptica.",
+        actionTip: "Tente não alternar janelas durante o timer para proteger sua Atenção Sustentada."
+      },
+      { 
+        text: "Planeje seus blocos no Timebox para evitar o cansaço da decisão.", 
+        concept: "Fadiga de Decisão: Decidir 'o que fazer agora' a todo momento drena a glicose do lobo frontal. O plano antecipado preserva sua energia para a execução.",
+        actionTip: "Preencha os horários do seu dia logo pela manhã ou na noite anterior."
+      },
+      { 
+        text: "O sistema destaca tarefas baseadas na sua bateria biológica atual.", 
+        concept: "Gestão de Bio-Energia: Executar tarefas complexas com energia baixa é a receita para o Burnout. Alinhe a carga cognitiva com seu estado hormonal.",
+        actionTip: "Atualize sua energia na barra lateral sempre que sentir mudança no humor ou cansaço."
+      }
     ]
   },
   plan: {
     title: "Arquitetura de Decisão",
     steps: [
-      { target: "matrix", text: "Organize visualmente o que é Importante vs Urgente.", concept: "Matriz de Eisenhower: Focar no Quadrante 2 (Importante/Não Urgente) reduz o cortisol a longo prazo." },
-      { target: "drag-drop", text: "Arraste para redefinir prioridades conforme sua clareza mental muda.", concept: "Flexibilidade Cognitiva: A capacidade de reajustar planos é uma função executiva vital." }
+      { 
+        text: "Organize visualmente o que é Importante vs Urgente na Matriz.", 
+        concept: "Gestão de Cortisol: A urgência libera cortisol. Focar no Quadrante 2 (Importante/Não Urgente) reduz o estresse crônico e aumenta a satisfação de longo prazo.",
+        actionTip: "Priorize o quadrante laranja (Q2) para crescer estrategicamente."
+      },
+      { 
+        text: "Arraste tarefas para redefinir prioridades conforme sua clareza mental.", 
+        concept: "Flexibilidade Cognitiva: A capacidade de reajustar o curso sem frustração é uma função executiva vital para a resiliência.",
+        actionTip: "Não tenha medo de mover tarefas se as circunstâncias do dia mudarem."
+      }
     ]
   },
   habits: {
     title: "Mielinização Profunda",
     steps: [
-      { target: "identity", text: "Defina quem você quer SER, não apenas o que quer FAZER.", concept: "Hábitos de Identidade: A mudança de hábito mais forte ocorre quando ela se torna parte do seu autoconceito." },
-      { target: "anchor", text: "Use uma âncora: algo que você já faz para 'pendurar' o novo hábito.", concept: "Encadeamento de Hábitos: Utiliza caminhos neurais já estabelecidos para facilitar a nova automação." }
+      { 
+        text: "Defina quem você QUER SER antes do que você quer FAZER.", 
+        concept: "Hábitos de Identidade: A mudança duradoura ocorre nos Gânglios da Base quando a ação se torna parte do autoconceito ('Eu sou um corredor').",
+        actionTip: "Escreva sua identidade no campo 'Identidade' (ex: 'Sou uma pessoa saudável')."
+      },
+      { 
+        text: "Use uma Âncora: um hábito que já existe para 'pendurar' o novo.", 
+        concept: "Encadeamento Neuronal: Pegamos uma trilha neural já pavimentada (ex: escovar dentes) e adicionamos uma nova sinapse ao final dela.",
+        actionTip: "Sua âncora deve ser algo que você faz 100% das vezes sem falhar."
+      }
     ]
   },
   fixed: {
-    title: "Bio-Ciclos",
+    title: "Bio-Ritmos Circadianos",
     steps: [
-      { target: "circadian", text: "Sincronize rotinas com os períodos do dia e frequências específicas.", concept: "Ritmo Circadiano: Seu cérebro produz diferentes neuroquímicos (cortisol/melatonina) baseados na luz e horário. Tarefas recorrentes reforçará a estrutura do dia." }
+      { 
+        text: "Sincronize rotinas com os períodos do dia (Manhã, Tarde, Noite).", 
+        concept: "Núcleo Supraquiasmático: Seu 'relógio mestre' espera certas atividades em certas horas para regular melatonina e dopamina.",
+        actionTip: "Crie rotinas fixas para os momentos de transição do dia (acordar/trabalhar/dormir)."
+      }
     ]
   }
 };
@@ -169,6 +209,7 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!userEmail) return;
     const interval = setInterval(async () => {
+      // Corrected: use 'userEmail' instead of undefined 'email'
       const remote = await syncService.pullData(userEmail);
       if (remote && remote.updatedAt > lastRemoteUpdate) {
         setTasks(remote.tasks || []);
@@ -188,12 +229,12 @@ const App: React.FC = () => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const email = (e.target as any).email.value;
-    if (!email) return;
-    setUserEmail(email);
-    localStorage.setItem('neuro-user-email', email);
+    const emailValue = (e.target as any).email.value;
+    if (!emailValue) return;
+    setUserEmail(emailValue);
+    localStorage.setItem('neuro-user-email', emailValue);
     setSyncStatus('syncing');
-    const remote = await syncService.pullData(email);
+    const remote = await syncService.pullData(emailValue);
     if (remote) {
       setTasks(remote.tasks || []);
       setRecurringTasks(remote.recurringTasks || []);
@@ -314,7 +355,6 @@ const App: React.FC = () => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Timebox Handlers
   const addTimeboxSlot = () => {
     const lastEntry = timebox[timebox.length - 1];
     const nextStart = lastEntry ? lastEntry.end : "08:00";
@@ -419,7 +459,11 @@ const App: React.FC = () => {
       {/* MAIN */}
       <main className="flex-1 overflow-y-auto p-4 md:p-10 pb-32 relative">
         {TUTORIAL_DATA[activeTab] && (
-          <button onClick={() => setTutorialStep(0)} className="fixed top-6 right-6 z-40 w-12 h-12 theme-bg-card border theme-border rounded-full flex items-center justify-center text-orange-500 hover:scale-110 active:scale-95 transition-all shadow-xl">
+          <button 
+            onClick={() => setTutorialStep(0)} 
+            className="fixed top-6 right-6 z-40 w-12 h-12 theme-bg-card border theme-border rounded-full flex items-center justify-center text-orange-500 hover:scale-110 active:scale-95 transition-all shadow-xl animate-pulse"
+            title="Aprender neuropsicologia desta aba"
+          >
             <HelpCircle size={24}/>
           </button>
         )}
@@ -585,6 +629,67 @@ const App: React.FC = () => {
           {activeTab === 'upgrades' && <UpgradesView upgrades={upgrades} points={points} setPoints={setPoints} setUpgrades={setUpgrades} playAudio={playAudio}/>}
         </div>
       </main>
+
+      {/* TUTORIAL MODAL OVERLAY */}
+      {tutorialStep !== null && TUTORIAL_DATA[activeTab] && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-6 bg-black/80 backdrop-blur-xl animate-in fade-in duration-500">
+           <div className="w-full max-w-lg theme-bg-card border-2 border-orange-500 shadow-glow-orange rounded-[48px] p-8 md:p-12 flex flex-col items-center text-center space-y-8 relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-2 flex gap-1">
+                 {TUTORIAL_DATA[activeTab].steps.map((_, i) => (
+                    <div key={i} className={`flex-1 h-full transition-all duration-500 ${i <= tutorialStep ? 'bg-orange-500' : 'theme-bg-body'}`}></div>
+                 ))}
+              </div>
+
+              <div className="w-20 h-20 bg-orange-600/10 rounded-full flex items-center justify-center border border-orange-500/30 text-orange-500 synapse-core">
+                 <BrainIcon size={40}/>
+              </div>
+
+              <div className="space-y-2">
+                 <h2 className="text-3xl font-black uppercase italic tracking-tighter text-orange-500">{TUTORIAL_DATA[activeTab].title}</h2>
+                 <p className="text-[10px] font-black uppercase theme-text-muted tracking-[0.3em]">Módulo de Aprendizado {tutorialStep + 1}/{TUTORIAL_DATA[activeTab].steps.length}</p>
+              </div>
+
+              <div className="space-y-6">
+                 <p className="text-2xl font-bold leading-tight theme-text-main">
+                    {TUTORIAL_DATA[activeTab].steps[tutorialStep].text}
+                 </p>
+
+                 <div className="p-6 theme-bg-input rounded-3xl border theme-border w-full text-left space-y-4">
+                    <div className="flex items-center gap-2 text-orange-400">
+                       <BookOpenCheck size={18}/>
+                       <span className="text-[10px] font-black uppercase tracking-widest">Base Neuropsicológica</span>
+                    </div>
+                    <p className="text-sm theme-text-main leading-relaxed italic">
+                       {TUTORIAL_DATA[activeTab].steps[tutorialStep].concept}
+                    </p>
+                    
+                    <div className="pt-2 flex items-start gap-3 border-t theme-border">
+                       <div className="mt-1 text-green-500"><Zap size={14}/></div>
+                       <div className="space-y-0.5">
+                          <p className="text-[9px] font-black uppercase theme-text-muted">Dica de Ação</p>
+                          <p className="text-xs font-semibold theme-text-main">{TUTORIAL_DATA[activeTab].steps[tutorialStep].actionTip}</p>
+                       </div>
+                    </div>
+                 </div>
+              </div>
+
+              <div className="flex w-full gap-4">
+                 <button 
+                   onClick={() => tutorialStep > 0 ? setTutorialStep(tutorialStep - 1) : setTutorialStep(null)} 
+                   className="flex-1 py-5 rounded-3xl font-black uppercase text-[11px] border theme-border hover:theme-bg-body transition-all theme-text-muted"
+                 > 
+                   {tutorialStep === 0 ? "Fechar" : "Voltar"}
+                 </button>
+                 <button 
+                   onClick={() => tutorialStep < TUTORIAL_DATA[activeTab].steps.length - 1 ? setTutorialStep(tutorialStep + 1) : setTutorialStep(null)} 
+                   className="flex-1 py-5 bg-orange-600 rounded-3xl font-black uppercase text-[11px] shadow-glow-orange hover:scale-105 active:scale-95 transition-all text-white"
+                 > 
+                   {tutorialStep < TUTORIAL_DATA[activeTab].steps.length - 1 ? "Próximo Passo" : "Entendi e Vou Praticar"}
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
 
       {/* TASK DETAIL EDITOR MODAL */}
       {editingTask && (
