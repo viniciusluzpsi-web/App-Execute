@@ -3,7 +3,7 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>NeuroExecutor</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
@@ -13,6 +13,10 @@
             --accent-secondary: #ef4444;
         }
         
+        /* Ocultar scrollbar mantendo funcionalidade */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
         /* Temas de Sotaque (Accents) */
         .theme-ocean { --accent-primary: #06b6d4; --accent-secondary: #3b82f6; }
         .theme-ocean .text-orange-600, .theme-ocean .text-orange-500 { color: #06b6d4; }
@@ -29,15 +33,6 @@
         .theme-cyber .bg-orange-600 { background-color: #ec4899; }
         .theme-cyber .shadow-glow-orange { box-shadow: 0 0 20px rgba(236, 72, 153, 0.4); }
 
-        .theme-gold { --accent-primary: #f59e0b; --accent-secondary: #d97706; }
-        .theme-gold .text-orange-600, .theme-gold .text-orange-500 { color: #f59e0b; }
-        .theme-gold .bg-orange-600 { background-color: #f59e0b; }
-        .theme-gold .shadow-glow-orange { box-shadow: 0 0 20px rgba(245, 158, 11, 0.4); }
-
-        .theme-quantum { --accent-primary: #8b5cf6; --accent-secondary: #d946ef; background: radial-gradient(circle at 50% 50%, #1e1b4b 0%, #020617 100%); }
-        .theme-cosmic { --accent-primary: #38bdf8; --accent-secondary: #1e40af; background: linear-gradient(to bottom, #0f172a, #020617); }
-        .theme-transcendent { --accent-primary: #ffffff; --accent-secondary: #fbbf24; background: #fafafa; color: #0f172a; }
-
         /* MODO CLARO - OVERRIDES */
         body.light-mode {
             background-color: #f8fafc;
@@ -49,89 +44,34 @@
         .light-mode .bg-\[\#0a1128\]\/95 { background-color: rgba(255, 255, 255, 0.95); }
         
         .light-mode .bg-slate-900, 
-        .light-mode .bg-slate-900\/40, 
-        .light-mode .bg-slate-900\/50, 
         .light-mode .bg-slate-900\/60, 
-        .light-mode .bg-slate-900\/80,
         .light-mode .bg-slate-800\/20,
         .light-mode .bg-slate-800\/30,
-        .light-mode .bg-slate-800\/40,
         .light-mode .bg-slate-800\/50 {
             background-color: #ffffff;
             border-color: #e2e8f0;
             color: #1e293b;
         }
 
-        .light-mode .text-white, 
-        .light-mode .text-slate-100, 
-        .light-mode .text-slate-200, 
-        .light-mode .text-slate-300 { color: #1e293b; }
-        
-        .light-mode .text-slate-400, 
-        .light-mode .text-slate-500, 
-        .light-mode .text-slate-600 { color: #64748b; }
+        .light-mode .text-white, .light-mode .text-slate-200, .light-mode .text-slate-300 { color: #1e293b; }
+        .light-mode .text-slate-400, .light-mode .text-slate-500, .light-mode .text-slate-600 { color: #64748b; }
+        .light-mode .border-slate-800, .light-mode .border-slate-700 { border-color: #e2e8f0; }
+        .light-mode .bg-slate-950\/90 { background-color: rgba(255, 255, 255, 0.9); }
 
-        .light-mode .border-slate-800, 
-        .light-mode .border-slate-700,
-        .light-mode .border-slate-700\/30,
-        .light-mode .border-slate-700\/50 { border-color: #e2e8f0; }
-
-        .light-mode .bg-slate-950\/90, 
-        .light-mode .bg-slate-950\/80 { background-color: rgba(255, 255, 255, 0.9); }
-
-        .light-mode .shadow-3xl, .light-mode .shadow-2xl, .light-mode .shadow-xl {
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
-        }
-
-        .light-mode input, .light-mode textarea, .light-mode select {
-            color: #0f172a;
-            background-color: #f1f5f9;
-            border-color: #e2e8f0;
-        }
-        
-        .light-mode input::placeholder { color: #94a3b8; }
-        
-        .light-mode .bg-green-600\/5 { background-color: rgba(22, 163, 74, 0.05); }
-        .light-mode .bg-red-600\/5 { background-color: rgba(220, 38, 38, 0.05); }
-        .light-mode .bg-blue-600\/5 { background-color: rgba(37, 99, 235, 0.05); }
-
-        /* Animações e Logotipo */
-        body { font-family: 'Inter', sans-serif; transition: background 0.5s ease, color 0.5s ease; }
+        body { font-family: 'Inter', sans-serif; transition: background 0.5s ease, color 0.5s ease; -webkit-tap-highlight-color: transparent; }
         .font-mono { font-family: 'JetBrains+Mono', monospace; }
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-
+        
         @keyframes glow-orange {
             0%, 100% { box-shadow: 0 0 10px rgba(249, 115, 22, 0.1); }
             50% { box-shadow: 0 0 25px rgba(249, 115, 22, 0.3); }
         }
-        .animate-glow-orange { animation: glow-orange 3s ease-in-out infinite; }
-
-        @keyframes glow-success-refined {
-            0% { box-shadow: 0 0 0px rgba(34, 197, 94, 0); }
-            20% { box-shadow: 0 0 40px rgba(34, 197, 94, 0.4); }
-            100% { box-shadow: 0 0 0px rgba(34, 197, 94, 0); }
-        }
-        .animate-glow-success { animation: glow-success-refined 1s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
-
-        @keyframes pulse-orange {
-            0%, 100% { border-color: rgba(234, 88, 12, 0.3); transform: scale(1); }
-            50% { border-color: rgba(234, 88, 12, 0.8); transform: scale(1.01); }
-        }
-        .animate-pulse-orange { animation: pulse-orange 2s ease-in-out infinite; }
+        .shadow-glow-orange { animation: glow-orange 3s ease-in-out infinite; }
 
         @keyframes synapse-pulse {
-            0%, 100% { opacity: 1; transform: scale(1); filter: blur(0px); }
-            50% { opacity: 0.7; transform: scale(1.05); filter: blur(1px); }
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.05); }
         }
         .synapse-core { animation: synapse-pulse 4s ease-in-out infinite; }
-
-        @keyframes particle-out {
-            0% { transform: translate(0, 0) scale(0); opacity: 1; }
-            100% { transform: translate(var(--dx), var(--dy)) scale(1.5); opacity: 0; }
-        }
-        .animate-particle { animation: particle-out 0.8s cubic-bezier(0, .9, .57, 1) forwards; }
     </style>
 <script type="importmap">
 {
