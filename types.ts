@@ -29,6 +29,7 @@ export interface Task {
   capacityNeeded: BrainCapacity; // Novo: Baseado no PDF
   completed: boolean;
   subtasks: string[];
+  notes?: string; // Novo: Suporte a anotações
   date: string;
   createdAt: number;
 }
