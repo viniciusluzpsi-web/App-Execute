@@ -36,6 +36,8 @@ const PERIOD_LABELS: Record<DayPeriod, string> = {
   Night: 'Madrugada'
 };
 
+const WEEK_DAYS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
+
 const TUTORIAL_DATA: Record<string, { title: string, steps: { target: string, text: string, concept: string }[] }> = {
   capture: {
     title: "Sincronismo de Captura",
@@ -70,7 +72,7 @@ const TUTORIAL_DATA: Record<string, { title: string, steps: { target: string, te
   fixed: {
     title: "Bio-Ciclos",
     steps: [
-      { target: "circadian", text: "Sincronize rotinas com os períodos do dia.", concept: "Ritmo Circadiano: Seu cérebro produz diferentes neuroquímicos (cortisol/melatonina) baseados na luz e horário." }
+      { target: "circadian", text: "Sincronize rotinas com os períodos do dia e frequências específicas.", concept: "Ritmo Circadiano: Seu cérebro produz diferentes neuroquímicos (cortisol/melatonina) baseados na luz e horário. Tarefas recorrentes reforçam a estrutura do dia." }
     ]
   }
 };
@@ -232,7 +234,7 @@ const App: React.FC = () => {
     const tempId = crypto.randomUUID();
     const tempTask: Task = {
       id: tempId,
-      text: taskInput, // Mantém o texto original do usuário
+      text: taskInput,
       priority: Priority.Q2,
       energy: 'Média',
       capacityNeeded: 'Neutro',
@@ -250,7 +252,6 @@ const App: React.FC = () => {
       const parsed = await geminiService.parseNaturalTask(taskInput);
       setTasks(prev => prev.map(t => t.id === tempId ? {
         ...t,
-        // Removemos o uso de parsed.text para garantir que o nome nunca mude
         priority: (parsed.priority as Priority) || t.priority,
         energy: (parsed.energy as any) || t.energy,
         subtasks: parsed.subtasks || [],
@@ -382,7 +383,6 @@ const App: React.FC = () => {
         )}
 
         <div className="max-w-6xl mx-auto space-y-10">
-          {/* TAB: CAPTURA */}
           {activeTab === 'capture' && (
             <div className="min-h-[80vh] flex flex-col justify-center animate-in fade-in zoom-in-95">
               <div className="text-center space-y-4 mb-12">
@@ -412,11 +412,9 @@ const App: React.FC = () => {
             </div>
           )}
 
-          {/* TAB: EXECUTAR */}
           {activeTab === 'execute' && (
             <div className="animate-in fade-in slide-in-from-bottom-10 space-y-12">
               <div className="flex flex-col lg:flex-row gap-10">
-                {/* Timer & Main Action */}
                 <div className="flex-1 space-y-6">
                   <div className="p-10 bg-slate-900 rounded-[64px] border border-slate-800 flex flex-col items-center justify-center space-y-8 relative overflow-hidden group min-h-[400px]">
                     <div className="text-9xl font-black italic tracking-tighter tabular-nums text-white drop-shadow-2xl">{formatTime(timeLeft)}</div>
@@ -426,7 +424,6 @@ const App: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* MINI TIMEBOX DIÁRIO */}
                   <div className="p-8 bg-slate-900/40 border border-slate-800 rounded-[48px] space-y-6">
                     <div className="flex justify-between items-center">
                        <div className="flex items-center gap-3">
@@ -464,7 +461,6 @@ const App: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Recommendations */}
                 <div className="w-full lg:w-96 flex flex-col gap-6">
                   {(() => {
                     const recommended = tasks.find(t => !t.completed && isTaskCompatible(t) && !t.isRefining);
@@ -502,7 +498,6 @@ const App: React.FC = () => {
             </div>
           )}
 
-          {/* TAB: MATRIZ */}
           {activeTab === 'plan' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in">
               {[
@@ -668,39 +663,78 @@ const HabitsView = ({ habits, setHabits, setPoints, playAudio, setShowHabitForm 
   </div>
 );
 
-const FixedView = ({ recurringTasks, setRecurringTasks, currentPeriod, setPoints, setShowRecurringForm }: any) => (
-  <div className="space-y-12 animate-in fade-in">
-    <div className="flex justify-between items-end">
-      <div><h2 className="text-4xl font-black uppercase italic text-purple-400">Bio-Ciclos</h2><p className="text-[10px] font-black text-slate-500 uppercase">Sincronia circadiana.</p></div>
-      <button onClick={() => setShowRecurringForm(true)} className="w-14 h-14 bg-purple-600 rounded-2xl flex items-center justify-center shadow-glow-blue"><Plus/></button>
+const FixedView = ({ recurringTasks, setRecurringTasks, currentPeriod, setPoints, setShowRecurringForm }: any) => {
+  const currentDay = new Date().getDay(); // 0-6
+
+  const isTaskForToday = (rt: RecurringTask) => {
+    if (rt.frequency === Frequency.DAILY) return true;
+    if (rt.frequency === Frequency.WEEKLY && rt.weekDays?.includes(currentDay)) return true;
+    return false;
+  };
+
+  return (
+    <div className="space-y-12 animate-in fade-in">
+      <div className="flex justify-between items-end">
+        <div><h2 className="text-4xl font-black uppercase italic text-purple-400">Bio-Ciclos</h2><p className="text-[10px] font-black text-slate-500 uppercase">Sincronia circadiana e estrutural.</p></div>
+        <button onClick={() => setShowRecurringForm(true)} className="w-14 h-14 bg-purple-600 rounded-2xl flex items-center justify-center shadow-glow-blue"><Plus/></button>
+      </div>
+      <div className="space-y-6">
+        {(['Morning', 'Day', 'Evening', 'Night'] as DayPeriod[]).map(p => {
+          const periodTasks = recurringTasks.filter((rt: any) => rt.period === p);
+          if (periodTasks.length === 0 && currentPeriod !== p) return null;
+
+          return (
+            <div key={p} className={`p-6 rounded-3xl border transition-all duration-500 ${currentPeriod === p ? 'bg-slate-900 border-purple-500 shadow-glow-blue/20' : 'bg-slate-950 opacity-40'}`}>
+              <div className="flex items-center gap-3 mb-4">
+                 {p === 'Morning' && <Sunrise className="text-purple-400" size={18}/>}
+                 {p === 'Day' && <Sun className="text-purple-400" size={18}/>}
+                 {p === 'Evening' && <Sunset className="text-purple-400" size={18}/>}
+                 {p === 'Night' && <MoonStar className="text-purple-400" size={18}/>}
+                 <h3 className="font-black uppercase text-sm text-purple-400 tracking-tighter italic">{PERIOD_LABELS[p]}</h3>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {periodTasks.map((rt: any) => {
+                   const todayStr = new Date().toISOString().split('T')[0];
+                   const done = rt.completedDates.includes(todayStr);
+                   const isToday = isTaskForToday(rt);
+
+                   return (
+                    <div 
+                      key={rt.id} 
+                      onClick={() => { 
+                        setRecurringTasks(recurringTasks.map((item: any) => item.id === rt.id ? {...item, completedDates: done ? item.completedDates.filter((d: string) => d !== todayStr) : [...item.completedDates, todayStr]} : item)); 
+                        if(!done) setPoints((pts: number) => pts + 25); 
+                      }} 
+                      className={`p-4 rounded-xl flex justify-between items-center cursor-pointer transition-all border ${done ? 'bg-slate-800/50 border-green-500/20 opacity-60' : 'bg-slate-800 border-slate-700 hover:border-purple-500'} ${isToday && !done ? 'border-purple-500/50 shadow-glow-blue/10 scale-[1.02]' : ''}`}
+                    >
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs font-bold uppercase ${done ? 'line-through text-slate-500' : ''}`}>{rt.text}</span>
+                          {isToday && !done && <span className="text-[7px] font-black uppercase bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded animate-pulse">Hoje</span>}
+                        </div>
+                        <div className="flex gap-2">
+                           <span className="text-[7px] font-black uppercase text-slate-500">{rt.frequency}</span>
+                           {rt.weekDays && rt.weekDays.length > 0 && (
+                             <div className="flex gap-0.5">
+                               {WEEK_DAYS.map((d, idx) => (
+                                 <span key={idx} className={`text-[6px] font-black ${rt.weekDays.includes(idx) ? 'text-purple-400' : 'text-slate-700'}`}>{d}</span>
+                               ))}
+                             </div>
+                           )}
+                        </div>
+                      </div>
+                      <div className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all ${done ? 'bg-green-600 shadow-glow-green scale-110' : 'bg-slate-900 border border-slate-700'}`}>{done && <Check size={12}/>}</div>
+                    </div>
+                   );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
-    <div className="space-y-6">
-      {(['Morning', 'Day', 'Evening', 'Night'] as DayPeriod[]).map(p => (
-        <div key={p} className={`p-6 rounded-3xl border transition-all duration-500 ${currentPeriod === p ? 'bg-slate-900 border-purple-500 shadow-glow-blue/20' : 'bg-slate-950 opacity-40'}`}>
-          <div className="flex items-center gap-3 mb-4">
-             {p === 'Morning' && <Sunrise className="text-purple-400" size={18}/>}
-             {p === 'Day' && <Sun className="text-purple-400" size={18}/>}
-             {p === 'Evening' && <Sunset className="text-purple-400" size={18}/>}
-             {p === 'Night' && <MoonStar className="text-purple-400" size={18}/>}
-             <h3 className="font-black uppercase text-sm text-purple-400 tracking-tighter italic">{PERIOD_LABELS[p]}</h3>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {recurringTasks.filter((rt: any) => rt.period === p).map((rt: any) => {
-               const today = new Date().toISOString().split('T')[0];
-               const done = rt.completedDates.includes(today);
-               return (
-                <div key={rt.id} onClick={() => { setRecurringTasks(recurringTasks.map((item: any) => item.id === rt.id ? {...item, completedDates: done ? item.completedDates.filter((d: string) => d !== today) : [...item.completedDates, today]} : item)); if(!done) setPoints((p: number) => p + 25); }} className={`p-4 rounded-xl flex justify-between items-center cursor-pointer transition-all border ${done ? 'bg-slate-800/50 border-green-500/20 opacity-60' : 'bg-slate-800 border-slate-700 hover:border-purple-500'}`}>
-                  <span className={`text-xs font-bold uppercase ${done ? 'line-through text-slate-500' : ''}`}>{rt.text}</span>
-                  <div className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all ${done ? 'bg-green-600 shadow-glow-green scale-110' : 'bg-slate-900 border border-slate-700'}`}>{done && <Check size={12}/>}</div>
-                </div>
-               );
-            })}
-          </div>
-        </div>
-      ))}
-    </div>
-  </div>
-);
+  );
+};
 
 const DashboardView = ({ tasks, habits, points, achievements }: any) => (
   <div className="space-y-10 animate-in fade-in">
@@ -748,19 +782,87 @@ const HabitForm = ({ habits, setHabits, setShowForm }: any) => (
   </div>
 );
 
-const RecurringForm = ({ recurringTasks, setRecurringTasks, setShowForm }: any) => (
-  <div className="fixed inset-0 z-[9000] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-xl">
-    <form className="w-full max-w-lg bg-[#0a1128] border border-slate-800 rounded-[40px] p-10 space-y-6" onSubmit={e => { e.preventDefault(); const target = e.target as any; const rt: RecurringTask = { id: crypto.randomUUID(), text: target.text.value, frequency: Frequency.DAILY, priority: Priority.Q2, energy: 'Baixa', period: target.period.value, completedDates: [] }; setRecurringTasks([rt, ...recurringTasks]); setShowForm(false); }}>
-      <h2 className="text-2xl font-black uppercase text-purple-400 italic">Nova Rotina</h2>
-      <input name="text" required className="w-full p-4 rounded-xl bg-slate-900 border border-slate-800 text-white" placeholder="Tarefa Recorrente"/>
-      <select name="period" className="w-full p-4 rounded-xl bg-slate-900 border border-slate-800 font-bold text-white">
-        {Object.entries(PERIOD_LABELS).map(([val, label]) => ( <option key={val} value={val} className="bg-slate-900">{label}</option> ))}
-      </select>
-      <button type="submit" className="w-full py-5 bg-purple-600 rounded-2xl font-black">Salvar</button>
-      <button type="button" onClick={() => setShowForm(false)} className="w-full text-xs uppercase font-black text-slate-500">Cancelar</button>
-    </form>
-  </div>
-);
+const RecurringForm = ({ recurringTasks, setRecurringTasks, setShowForm }: any) => {
+  const [freq, setFreq] = useState<Frequency>(Frequency.DAILY);
+  const [selectedDays, setSelectedDays] = useState<number[]>([]);
+
+  const toggleDay = (idx: number) => {
+    setSelectedDays(prev => prev.includes(idx) ? prev.filter(d => d !== idx) : [...prev, idx]);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[9000] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-xl">
+      <form className="w-full max-w-lg bg-[#0a1128] border border-slate-800 rounded-[40px] p-10 space-y-6" onSubmit={e => { 
+        e.preventDefault(); 
+        const target = e.target as any; 
+        const rt: RecurringTask = { 
+          id: crypto.randomUUID(), 
+          text: target.text.value, 
+          frequency: freq, 
+          priority: Priority.Q2, 
+          energy: target.energy.value as any, 
+          period: target.period.value, 
+          completedDates: [],
+          weekDays: freq === Frequency.WEEKLY ? selectedDays : undefined
+        }; 
+        setRecurringTasks([rt, ...recurringTasks]); 
+        setShowForm(false); 
+      }}>
+        <h2 className="text-2xl font-black uppercase text-purple-400 italic">Nova Rotina</h2>
+        
+        <div className="space-y-2">
+          <label className="text-[10px] font-black uppercase text-slate-500">O que se repete?</label>
+          <input name="text" required className="w-full p-4 rounded-xl bg-slate-900 border border-slate-800 text-white focus:border-purple-500 outline-none" placeholder="Ex: Meditação matinal"/>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase text-slate-500">Frequência</label>
+            <select value={freq} onChange={(e) => setFreq(e.target.value as Frequency)} className="w-full p-4 rounded-xl bg-slate-900 border border-slate-800 font-bold text-white outline-none">
+              {Object.values(Frequency).map(f => ( <option key={f} value={f} className="bg-slate-900">{f}</option> ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase text-slate-500">Bio-Período</label>
+            <select name="period" className="w-full p-4 rounded-xl bg-slate-900 border border-slate-800 font-bold text-white outline-none">
+              {Object.entries(PERIOD_LABELS).map(([val, label]) => ( <option key={val} value={val} className="bg-slate-900">{label}</option> ))}
+            </select>
+          </div>
+        </div>
+
+        {freq === Frequency.WEEKLY && (
+          <div className="space-y-2 animate-in slide-in-from-top-2">
+            <label className="text-[10px] font-black uppercase text-slate-500">Dias da Semana</label>
+            <div className="flex justify-between gap-1">
+              {WEEK_DAYS.map((d, idx) => (
+                <button 
+                  key={idx} 
+                  type="button" 
+                  onClick={() => toggleDay(idx)}
+                  className={`flex-1 py-3 rounded-xl text-xs font-black transition-all border ${selectedDays.includes(idx) ? 'bg-purple-600 border-purple-500 shadow-glow-blue' : 'bg-slate-900 border-slate-800 text-slate-500'}`}
+                >
+                  {d}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-2">
+           <label className="text-[10px] font-black uppercase text-slate-500">Energia Necessária</label>
+           <select name="energy" className="w-full p-4 rounded-xl bg-slate-900 border border-slate-800 font-bold text-white outline-none">
+              <option value="Baixa">Baixa</option>
+              <option value="Média">Média</option>
+              <option value="Alta">Alta</option>
+           </select>
+        </div>
+
+        <button type="submit" className="w-full py-5 bg-purple-600 rounded-2xl font-black shadow-glow-blue hover:scale-105 active:scale-95 transition-all uppercase">Sintetizar Ciclo</button>
+        <button type="button" onClick={() => setShowForm(false)} className="w-full text-xs uppercase font-black text-slate-500 hover:text-white transition-colors">Cancelar</button>
+      </form>
+    </div>
+  );
+};
 
 const NavBtn: React.FC<{ icon: React.ReactNode, label: string, active: boolean, onClick: () => void }> = ({ icon, label, active, onClick }) => (
   <button onClick={onClick} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-black uppercase text-[11px] transition-all ${active ? 'bg-orange-600 text-white shadow-lg scale-105' : 'text-slate-500 hover:bg-slate-800/30'}`}>{icon} {label}</button>

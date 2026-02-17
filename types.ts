@@ -52,6 +52,7 @@ export interface RecurringTask {
   energy: 'Baixa' | 'Média' | 'Alta';
   completedDates: string[]; 
   period?: DayPeriod; 
+  weekDays?: number[]; // 0=Dom, 1=Seg, ..., 6=Sab
 }
 
 export interface Habit {
