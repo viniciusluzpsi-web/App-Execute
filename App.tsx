@@ -14,7 +14,7 @@ import {
   ChefHat, IceCream, Pizza, Cookie, ShieldAlert, ZapOff as ZapIcon, FastForward, Filter, Settings, Fingerprint,
   Sunrise, Sunset, MoonStar, Briefcase, Heart, Edit3, Sparkle, Swords, Gem, Lock, Unlock, Zap as ZapBolt,
   Zap as SparkleIcon, History, Fingerprint as IdentityIcon, Send, Brain as BrainIcon, LifeBuoy, FileText, Layers,
-  Loader, RefreshCcw, Info as InfoIcon, ArrowUpRight, BookOpenCheck
+  Loader, RefreshCcw, Info as InfoIcon, ArrowUpRight, BookOpenCheck, Menu, User
 } from 'lucide-react';
 import { Priority, Task, Habit, RecurringTask, Frequency, BrainCapacity, DopamenuItem, DayPeriod, Upgrade, Achievement, TimeboxEntry } from './types';
 import { geminiService } from './services/geminiService';
@@ -156,6 +156,7 @@ const App: React.FC = () => {
   const [showRecurringForm, setShowRecurringForm] = useState(false);
   const [editingRecurringTaskId, setEditingRecurringTaskId] = useState<string | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [showMobileDrawer, setShowMobileDrawer] = useState(false);
 
   const editingTask = useMemo(() => tasks.find(t => t.id === editingTaskId) || null, [tasks, editingTaskId]);
   const timerRef = useRef<number | null>(null);
@@ -209,7 +210,6 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!userEmail) return;
     const interval = setInterval(async () => {
-      // Corrected: use 'userEmail' instead of undefined 'email'
       const remote = await syncService.pullData(userEmail);
       if (remote && remote.updatedAt > lastRemoteUpdate) {
         setTasks(remote.tasks || []);
@@ -396,55 +396,93 @@ const App: React.FC = () => {
     setRecurringTasks(prev => prev.filter(rt => rt.id !== id));
   };
 
+  const SidebarContent = () => (
+    <>
+      <div className="flex items-center gap-3 mb-6 md:mb-0"><SynapseLogo /><h1 className="text-2xl font-black italic text-orange-600 uppercase tracking-tighter">Neuro</h1></div>
+      
+      <div className="p-4 theme-bg-input border rounded-3xl space-y-3 relative group">
+         <div className="flex justify-between items-center">
+            <p className="text-[9px] font-black uppercase theme-text-muted tracking-widest">Neuro-Identity</p>
+            <div className="flex gap-2 items-center">
+              <button onClick={toggleDarkMode} title={isDarkMode ? "Modo Claro" : "Modo Escuro"} className="p-1.5 rounded-lg hover:bg-slate-800 transition-all text-slate-400 hover:text-orange-500 active:scale-90">
+                 {isDarkMode ? <Sun size={14}/> : <Moon size={14}/>}
+              </button>
+              <button onClick={toggleSound} title={isSoundEnabled ? "Desativar Som" : "Ativar Som"} className="p-1.5 rounded-lg hover:bg-slate-800 transition-all text-slate-400 hover:text-orange-500 active:scale-90">
+                 {isSoundEnabled ? <Volume2 size={14}/> : <VolumeX size={14}/>}
+              </button>
+              <div className={`w-2 h-2 rounded-full ${syncStatus === 'synced' ? 'bg-green-500 shadow-glow-green' : syncStatus === 'syncing' ? 'bg-orange-500 animate-pulse' : syncStatus === 'error' ? 'bg-red-500' : 'bg-slate-700'}`}></div>
+            </div>
+         </div>
+         {userEmail ? (
+           <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-bold truncate theme-text-main">{userEmail}</span>
+              <button onClick={() => { setUserEmail(''); localStorage.removeItem('neuro-user-email'); }} className="text-[8px] font-black uppercase text-red-500/60 hover:text-red-500 transition-colors">Sair / Desconectar</button>
+           </div>
+         ) : (
+           <form onSubmit={handleLogin} className="flex flex-col gap-2">
+              <input name="email" type="email" placeholder="Seu e-mail..." className="w-full theme-bg-body border theme-border rounded-xl px-3 py-2 text-[10px] outline-none focus:border-orange-500 transition-all" required />
+              <button type="submit" className="w-full py-2 bg-orange-600 rounded-xl text-[9px] font-black uppercase shadow-glow-orange hover:scale-105 active:scale-95 transition-all text-white">Sincronizar Cloud</button>
+           </form>
+         )}
+      </div>
+
+      <div className="p-4 theme-bg-input border rounded-3xl space-y-3">
+        <p className="text-[9px] font-black uppercase theme-text-muted tracking-widest text-center">Bateria Biológica</p>
+        <div className="flex justify-between items-center gap-2">
+          {[
+            { val: 'Baixa', color: 'text-red-500', icon: <BatteryLow size={18}/> },
+            { val: 'Média', color: 'text-yellow-500', icon: <BatteryMedium size={18}/> },
+            { val: 'Alta', color: 'text-green-500', icon: <BatteryFull size={18}/> }
+          ].map(e => (
+            <button key={e.val} onClick={() => setUserEnergy(e.val as any)} className={`flex-1 flex flex-col items-center p-2 rounded-xl transition-all ${userEnergy === e.val ? 'bg-orange-600/10 border-orange-500/30 shadow-glow-orange scale-110' : 'opacity-40 hover:opacity-100'}`}>
+              <div className={e.color}>{e.icon}</div>
+              <span className="text-[8px] font-black uppercase mt-1">{e.val}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+
   return (
     <div className={`min-h-screen flex flex-col md:flex-row transition-all duration-300 ${!isDarkMode ? 'light-mode' : ''}`}>
       
-      {/* SIDEBAR DESKTOP */}
-      <aside className="hidden md:flex flex-col w-72 h-screen theme-bg-sidebar border-r p-8 space-y-6 z-50 overflow-y-auto no-scrollbar">
-        <div className="flex items-center gap-3"><SynapseLogo /><h1 className="text-2xl font-black italic text-orange-600 uppercase tracking-tighter">Neuro</h1></div>
-        
-        <div className="p-4 theme-bg-input border rounded-3xl space-y-3 relative group">
-           <div className="flex justify-between items-center">
-              <p className="text-[9px] font-black uppercase theme-text-muted tracking-widest">Neuro-Identity</p>
-              <div className="flex gap-2 items-center">
-                <button onClick={toggleDarkMode} title={isDarkMode ? "Modo Claro" : "Modo Escuro"} className="p-1.5 rounded-lg hover:bg-slate-800 transition-all text-slate-400 hover:text-orange-500 active:scale-90">
-                   {isDarkMode ? <Sun size={14}/> : <Moon size={14}/>}
-                </button>
-                <button onClick={toggleSound} title={isSoundEnabled ? "Desativar Som" : "Ativar Som"} className="p-1.5 rounded-lg hover:bg-slate-800 transition-all text-slate-400 hover:text-orange-500 active:scale-90">
-                   {isSoundEnabled ? <Volume2 size={14}/> : <VolumeX size={14}/>}
-                </button>
-                <div className={`w-2 h-2 rounded-full ${syncStatus === 'synced' ? 'bg-green-500 shadow-glow-green' : syncStatus === 'syncing' ? 'bg-orange-500 animate-pulse' : syncStatus === 'error' ? 'bg-red-500' : 'bg-slate-700'}`}></div>
+      {/* MOBILE HEADER */}
+      <header className="md:hidden sticky top-0 left-0 w-full theme-bg-sidebar backdrop-blur-xl border-b z-[60] flex items-center justify-between px-6 py-4">
+         <div className="flex items-center gap-2">
+            <SynapseLogo />
+            <h1 className="text-xl font-black italic text-orange-600 uppercase tracking-tighter">Neuro</h1>
+         </div>
+         <button 
+           onClick={() => setShowMobileDrawer(true)}
+           className="p-2.5 theme-bg-input theme-border border rounded-xl theme-text-main relative"
+         >
+            <User size={20}/>
+            <div className={`absolute top-1 right-1 w-2 h-2 rounded-full ${syncStatus === 'synced' ? 'bg-green-500 shadow-glow-green' : syncStatus === 'syncing' ? 'bg-orange-500 animate-pulse' : syncStatus === 'error' ? 'bg-red-500' : 'bg-slate-700'}`}></div>
+         </button>
+      </header>
+
+      {/* MOBILE SETTINGS DRAWER */}
+      {showMobileDrawer && (
+        <div className="fixed inset-0 z-[100] md:hidden animate-in fade-in duration-300">
+           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowMobileDrawer(false)}></div>
+           <div className="absolute right-0 top-0 h-full w-[85%] theme-bg-sidebar border-l theme-border shadow-2xl p-8 flex flex-col gap-8 animate-in slide-in-from-right duration-300">
+              <div className="flex justify-between items-center">
+                 <h2 className="text-xl font-black uppercase italic tracking-tighter theme-text-main">Bio-Perfil</h2>
+                 <button onClick={() => setShowMobileDrawer(false)} className="p-2 theme-text-muted hover:bg-black/10 rounded-full transition-colors"><X size={24}/></button>
+              </div>
+              <SidebarContent />
+              <div className="mt-auto p-6 theme-bg-card border theme-border rounded-3xl flex flex-col items-center text-center gap-2">
+                 <BrainIcon className="text-orange-500/30" size={32}/>
+                 <p className="text-[10px] font-black uppercase theme-text-muted tracking-widest leading-relaxed">Seu cérebro é seu hardware mais precioso. Cuide dele.</p>
               </div>
            </div>
-           {userEmail ? (
-             <div className="flex flex-col gap-1">
-                <span className="text-[10px] font-bold truncate theme-text-main">{userEmail}</span>
-                <button onClick={() => { setUserEmail(''); localStorage.removeItem('neuro-user-email'); }} className="text-[8px] font-black uppercase text-red-500/60 hover:text-red-500 transition-colors">Sair / Desconectar</button>
-             </div>
-           ) : (
-             <form onSubmit={handleLogin} className="flex flex-col gap-2">
-                <input name="email" type="email" placeholder="Seu e-mail..." className="w-full theme-bg-body border theme-border rounded-xl px-3 py-2 text-[10px] outline-none focus:border-orange-500 transition-all" required />
-                <button type="submit" className="w-full py-2 bg-orange-600 rounded-xl text-[9px] font-black uppercase shadow-glow-orange hover:scale-105 active:scale-95 transition-all text-white">Sincronizar Cloud</button>
-             </form>
-           )}
         </div>
+      )}
 
-        <div className="p-4 theme-bg-input border rounded-3xl space-y-3">
-          <p className="text-[9px] font-black uppercase theme-text-muted tracking-widest text-center">Bateria Biológica</p>
-          <div className="flex justify-between items-center gap-2">
-            {[
-              { val: 'Baixa', color: 'text-red-500', icon: <BatteryLow size={18}/> },
-              { val: 'Média', color: 'text-yellow-500', icon: <BatteryMedium size={18}/> },
-              { val: 'Alta', color: 'text-green-500', icon: <BatteryFull size={18}/> }
-            ].map(e => (
-              <button key={e.val} onClick={() => setUserEnergy(e.val as any)} className={`flex-1 flex flex-col items-center p-2 rounded-xl transition-all ${userEnergy === e.val ? 'bg-orange-600/10 border-orange-500/30 shadow-glow-orange scale-110' : 'opacity-40 hover:opacity-100'}`}>
-                <div className={e.color}>{e.icon}</div>
-                <span className="text-[8px] font-black uppercase mt-1">{e.val}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
+      {/* SIDEBAR DESKTOP */}
+      <aside className="hidden md:flex flex-col w-72 h-screen theme-bg-sidebar border-r p-8 space-y-6 z-50 overflow-y-auto no-scrollbar">
+        <SidebarContent />
         <nav className="flex-1 space-y-1">
           <NavBtn icon={<ListTodo/>} label="Captura" active={activeTab === 'capture'} onClick={() => setActiveTab('capture')}/>
           <NavBtn icon={<Timer/>} label="Executar" active={activeTab === 'execute'} onClick={() => setActiveTab('execute')}/>
@@ -461,42 +499,42 @@ const App: React.FC = () => {
         {TUTORIAL_DATA[activeTab] && (
           <button 
             onClick={() => setTutorialStep(0)} 
-            className="fixed top-6 right-6 z-40 w-12 h-12 theme-bg-card border theme-border rounded-full flex items-center justify-center text-orange-500 hover:scale-110 active:scale-95 transition-all shadow-xl animate-pulse"
+            className="fixed bottom-24 right-6 md:top-6 md:bottom-auto z-40 w-14 h-14 theme-bg-card border theme-border rounded-full flex items-center justify-center text-orange-500 hover:scale-110 active:scale-95 transition-all shadow-xl animate-pulse"
             title="Aprender neuropsicologia desta aba"
           >
-            <HelpCircle size={24}/>
+            <HelpCircle size={28}/>
           </button>
         )}
 
         <div className="max-w-6xl mx-auto space-y-10">
           {activeTab === 'capture' && (
-            <div className="min-h-[80vh] flex flex-col justify-center animate-in fade-in zoom-in-95">
+            <div className="min-h-[70vh] md:min-h-[80vh] flex flex-col justify-center animate-in fade-in zoom-in-95">
               <div className="text-center space-y-4 mb-12">
-                <div className="w-20 h-20 bg-orange-600/10 rounded-full flex items-center justify-center mx-auto border border-orange-600/20 shadow-glow-orange"><BrainIcon className="text-orange-500" size={32}/></div>
-                <h2 className="text-5xl md:text-6xl font-black uppercase italic tracking-tighter">Entrada Neural</h2>
-                <p className="text-[11px] font-black theme-text-muted uppercase tracking-[0.4em]">Esvazie sua mente instantaneamente.</p>
+                <div className="w-16 h-16 md:w-20 md:h-20 bg-orange-600/10 rounded-full flex items-center justify-center mx-auto border border-orange-600/20 shadow-glow-orange"><BrainIcon className="text-orange-500" size={32}/></div>
+                <h2 className="text-4xl md:text-6xl font-black uppercase italic tracking-tighter">Entrada Neural</h2>
+                <p className="text-[10px] md:text-[11px] font-black theme-text-muted uppercase tracking-[0.3em] md:tracking-[0.4em]">Esvazie sua mente instantaneamente.</p>
               </div>
-              <form onSubmit={handleSmartCapture} className="relative group max-w-2xl mx-auto w-full px-4 md:px-0">
-                <div className="p-6 md:p-8 rounded-[48px] border-4 transition-all duration-500 theme-bg-card border-slate-800 focus-within:border-orange-600 shadow-glow-orange/20">
-                  <div className="flex items-center gap-4">
-                    <input autoFocus value={newTaskText} onChange={e => setNewTaskText(e.target.value)} className="flex-1 bg-transparent border-none outline-none text-2xl md:text-3xl font-black theme-text-main" placeholder="No que você está pensando?" onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) handleSmartCapture(e); }} />
-                    <button type="submit" className="w-14 h-14 md:w-16 md:h-16 bg-orange-600 rounded-3xl flex items-center justify-center shadow-glow-orange hover:scale-110 active:scale-95 transition-all text-white"><Plus size={32}/></button>
+              <form onSubmit={handleSmartCapture} className="relative group max-w-2xl mx-auto w-full px-2 md:px-0">
+                <div className="p-5 md:p-8 rounded-[32px] md:rounded-[48px] border-2 md:border-4 transition-all duration-500 theme-bg-card border-slate-800 focus-within:border-orange-600 shadow-glow-orange/20">
+                  <div className="flex items-center gap-3 md:gap-4">
+                    <input autoFocus value={newTaskText} onChange={e => setNewTaskText(e.target.value)} className="flex-1 bg-transparent border-none outline-none text-xl md:text-3xl font-black theme-text-main" placeholder="O que está na mente?" onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) handleSmartCapture(e); }} />
+                    <button type="submit" className="w-12 h-12 md:w-16 md:h-16 bg-orange-600 rounded-2xl md:rounded-3xl flex items-center justify-center shadow-glow-orange hover:scale-110 active:scale-95 transition-all text-white"><Plus size={24}/></button>
                   </div>
                 </div>
               </form>
-              <div className="max-w-xl mx-auto w-full mt-10 space-y-3 px-4 md:px-0">
+              <div className="max-w-xl mx-auto w-full mt-10 space-y-3 px-2 md:px-0">
                 {tasks.slice(0, 3).map(t => (
                   <div key={t.id} className={`p-4 rounded-2xl theme-bg-card border theme-border flex items-center justify-between animate-in slide-in-from-top-4 ${t.isRefining ? 'border-orange-500/50 shadow-glow-orange/10 italic opacity-70' : ''}`}>
-                    <div className="flex items-center gap-3">
-                      {t.isRefining ? <Loader2 className="animate-spin text-orange-500" size={16}/> : <CheckCircle2 className="theme-text-muted opacity-40" size={16}/>}
-                      <span className="text-xs font-bold uppercase tracking-tight theme-text-main">{t.text}</span>
+                    <div className="flex items-center gap-3 overflow-hidden">
+                      {t.isRefining ? <Loader2 className="animate-spin text-orange-500 flex-shrink-0" size={16}/> : <CheckCircle2 className="theme-text-muted opacity-40 flex-shrink-0" size={16}/>}
+                      <span className="text-xs font-bold uppercase tracking-tight theme-text-main truncate">{t.text}</span>
                     </div>
                     {!t.isRefining && (
                       <button onClick={() => setEditingTaskId(t.id)} className="p-2 theme-text-muted hover:text-orange-500 transition-colors">
                         <Edit3 size={14}/>
                       </button>
                     )}
-                    {t.isRefining && <span className="text-[8px] font-black uppercase text-orange-500 animate-pulse">Sintonizando IA...</span>}
+                    {t.isRefining && <span className="text-[8px] font-black uppercase text-orange-500 animate-pulse whitespace-nowrap ml-2">Sintonizando...</span>}
                   </div>
                 ))}
               </div>
@@ -504,46 +542,48 @@ const App: React.FC = () => {
           )}
 
           {activeTab === 'execute' && (
-            <div className="animate-in fade-in slide-in-from-bottom-10 space-y-12">
-              <div className="flex flex-col lg:flex-row gap-10">
+            <div className="animate-in fade-in slide-in-from-bottom-10 space-y-12 pb-10">
+              <div className="flex flex-col lg:flex-row gap-8 md:gap-10">
                 <div className="flex-1 space-y-6">
-                  <div className="p-10 theme-bg-card rounded-[64px] border theme-border flex flex-col items-center justify-center space-y-8 relative overflow-hidden group min-h-[400px] shadow-xl">
-                    <div className="text-8xl md:text-9xl font-black italic tracking-tighter tabular-nums theme-text-main drop-shadow-2xl">{formatTime(timeLeft)}</div>
+                  <div className="p-8 md:p-10 theme-bg-card rounded-[40px] md:rounded-[64px] border theme-border flex flex-col items-center justify-center space-y-8 relative overflow-hidden group min-h-[300px] md:min-h-[400px] shadow-xl">
+                    <div className="text-7xl md:text-9xl font-black italic tracking-tighter tabular-nums theme-text-main drop-shadow-2xl">{formatTime(timeLeft)}</div>
                     <div className="flex gap-4">
-                      <button onClick={() => setIsTimerActive(!isTimerActive)} className="px-10 py-5 bg-orange-600 text-white rounded-3xl font-black uppercase flex items-center gap-3 hover:scale-105 active:scale-95 transition-all shadow-glow-orange">{isTimerActive ? <><Pause size={20}/> Pausar</> : <><Play size={20}/> Fluxo</>}</button>
-                      <button onClick={() => setTimeLeft(90*60)} className="p-5 theme-bg-input border theme-border rounded-3xl hover:opacity-80 transition-colors theme-text-main"><RotateCcw size={20}/></button>
+                      <button onClick={() => setIsTimerActive(!isTimerActive)} className="px-8 md:px-10 py-4 md:py-5 bg-orange-600 text-white rounded-2xl md:rounded-3xl font-black uppercase flex items-center gap-3 hover:scale-105 active:scale-95 transition-all shadow-glow-orange text-sm md:text-base">{isTimerActive ? <><Pause size={20}/> Pausar</> : <><Play size={20}/> Fluxo</>}</button>
+                      <button onClick={() => setTimeLeft(90*60)} className="p-4 md:p-5 theme-bg-input border theme-border rounded-2xl md:rounded-3xl hover:opacity-80 transition-colors theme-text-main"><RotateCcw size={20}/></button>
                     </div>
                   </div>
 
-                  <div className="p-8 theme-bg-card/40 border theme-border rounded-[48px] space-y-6 shadow-sm">
+                  <div className="p-6 md:p-8 theme-bg-card/40 border theme-border rounded-[32px] md:rounded-[48px] space-y-6 shadow-sm">
                     <div className="flex justify-between items-center">
                        <div className="flex items-center gap-3">
                           <Clock className="text-orange-500" size={20}/>
-                          <h3 className="text-xl font-black uppercase italic tracking-tighter theme-text-main">Timebox Diário</h3>
+                          <h3 className="text-lg md:text-xl font-black uppercase italic tracking-tighter theme-text-main">Timebox Diário</h3>
                        </div>
-                       <button onClick={addTimeboxSlot} className="p-2 bg-orange-600/10 text-orange-500 rounded-xl hover:bg-orange-600 hover:text-white transition-all"><Plus size={18}/></button>
+                       <button onClick={addTimeboxSlot} className="p-2.5 bg-orange-600/10 text-orange-500 rounded-xl hover:bg-orange-600 hover:text-white transition-all"><Plus size={20}/></button>
                     </div>
                     <div className="space-y-3 max-h-[400px] overflow-y-auto no-scrollbar">
                        {timebox.length === 0 ? (
-                         <p className="text-center py-10 text-[10px] font-black uppercase theme-text-muted border border-dashed theme-border rounded-3xl">Nenhum bloco de tempo definido para hoje.</p>
+                         <div className="text-center py-10 px-6 border border-dashed theme-border rounded-3xl">
+                            <p className="text-[10px] font-black uppercase theme-text-muted">Nenhum bloco de tempo definido hoje.</p>
+                         </div>
                        ) : (
                          timebox.map((entry) => (
-                           <div key={entry.id} className={`group flex items-center gap-4 p-4 rounded-3xl border transition-all ${entry.completed ? 'opacity-40 grayscale theme-bg-body' : 'theme-bg-card shadow-sm hover:border-orange-500/30'}`}>
-                              <div className="flex flex-col gap-1 w-20">
-                                 <input type="text" value={entry.start} onChange={e => updateTimeboxEntry(entry.id, { start: e.target.value })} className="bg-transparent text-[10px] font-black theme-text-muted outline-none w-full text-center hover:text-orange-500 transition-colors"/>
+                           <div key={entry.id} className={`group flex items-center gap-3 md:gap-4 p-3 md:p-4 rounded-[24px] md:rounded-3xl border transition-all ${entry.completed ? 'opacity-40 grayscale theme-bg-body' : 'theme-bg-card shadow-sm hover:border-orange-500/30'}`}>
+                              <div className="flex flex-col gap-1 w-16 md:w-20 flex-shrink-0">
+                                 <input type="text" value={entry.start} onChange={e => updateTimeboxEntry(entry.id, { start: e.target.value })} className="bg-transparent text-[9px] md:text-[10px] font-black theme-text-muted outline-none w-full text-center"/>
                                  <div className="h-px theme-bg-body w-full opacity-10"/>
-                                 <input type="text" value={entry.end} onChange={e => updateTimeboxEntry(entry.id, { end: e.target.value })} className="bg-transparent text-[10px] font-black theme-text-muted outline-none w-full text-center hover:text-orange-500 transition-colors"/>
+                                 <input type="text" value={entry.end} onChange={e => updateTimeboxEntry(entry.id, { end: e.target.value })} className="bg-transparent text-[9px] md:text-[10px] font-black theme-text-muted outline-none w-full text-center"/>
                               </div>
                               <input 
                                 type="text" 
                                 value={entry.activity} 
                                 onChange={e => updateTimeboxEntry(entry.id, { activity: e.target.value })} 
-                                placeholder="Descreva a atividade..."
-                                className={`flex-1 bg-transparent font-bold text-sm outline-none ${entry.completed ? 'line-through theme-text-muted' : 'theme-text-main'}`}
+                                placeholder="Atividade..."
+                                className={`flex-1 bg-transparent font-bold text-sm outline-none truncate ${entry.completed ? 'line-through theme-text-muted' : 'theme-text-main'}`}
                               />
-                              <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                                <button onClick={() => updateTimeboxEntry(entry.id, { completed: !entry.completed })} className={`p-2 rounded-lg transition-all ${entry.completed ? 'text-green-500 bg-green-500/10' : 'theme-text-muted hover:text-green-500 hover:bg-green-500/10'}`}><Check size={16}/></button>
-                                <button onClick={() => removeTimeboxEntry(entry.id)} className="p-2 rounded-lg theme-text-muted hover:text-red-500 hover:bg-red-500/10"><Trash2 size={16}/></button>
+                              <div className="flex gap-1">
+                                <button onClick={() => updateTimeboxEntry(entry.id, { completed: !entry.completed })} className={`p-2.5 rounded-xl transition-all ${entry.completed ? 'text-green-500 bg-green-500/10' : 'theme-text-muted hover:text-green-500'}`}><Check size={18}/></button>
+                                <button onClick={() => removeTimeboxEntry(entry.id)} className="p-2.5 rounded-xl theme-text-muted hover:text-red-500"><Trash2 size={18}/></button>
                               </div>
                            </div>
                          ))
@@ -556,35 +596,35 @@ const App: React.FC = () => {
                   {(() => {
                     const recommended = tasks.find(t => !t.completed && isTaskCompatible(t) && !t.isRefining);
                     return recommended ? (
-                      <div className="p-8 bg-orange-600 rounded-[48px] shadow-glow-orange flex flex-col justify-between min-h-[220px]">
+                      <div className="p-6 md:p-8 bg-orange-600 rounded-[32px] md:rounded-[48px] shadow-glow-orange flex flex-col justify-between min-h-[180px] md:min-h-[220px]">
                          <div className="space-y-2">
-                           <span className="text-[10px] font-black uppercase text-white/70 tracking-widest">Bio-Compatível Agora</span>
-                           <h4 className="text-2xl font-black uppercase leading-tight text-white">{recommended.text}</h4>
+                           <span className="text-[9px] font-black uppercase text-white/70 tracking-widest">Bio-Compatível Agora</span>
+                           <h4 className="text-xl md:text-2xl font-black uppercase leading-tight text-white">{recommended.text}</h4>
                          </div>
-                         <button onClick={() => setEditingTaskId(recommended.id)} className="mt-8 flex items-center justify-center gap-3 py-4 bg-white/10 hover:bg-white/20 rounded-2xl text-[10px] font-black uppercase border border-white/20 transition-all text-white w-full">
-                            <Edit3 size={16}/> Ajustar Detalhes
+                         <button onClick={() => setEditingTaskId(recommended.id)} className="mt-6 md:mt-8 flex items-center justify-center gap-3 py-3 md:py-4 bg-white/10 hover:bg-white/20 rounded-xl md:rounded-2xl text-[10px] font-black uppercase border border-white/20 transition-all text-white w-full">
+                            <Edit3 size={16}/> Detalhes
                          </button>
                       </div>
                     ) : (
-                      <div className="p-8 theme-bg-card border border-dashed theme-border rounded-[48px] flex flex-col items-center justify-center text-center space-y-4 min-h-[220px]">
-                         <ZapOff className="theme-text-muted opacity-30" size={48}/>
-                         <p className="text-[11px] font-black uppercase theme-text-muted">Nenhuma tarefa pronta para sua energia {userEnergy}</p>
+                      <div className="p-6 md:p-8 theme-bg-card border border-dashed theme-border rounded-[32px] md:rounded-[48px] flex flex-col items-center justify-center text-center space-y-4 min-h-[180px] md:min-h-[220px]">
+                         <ZapOff className="theme-text-muted opacity-30" size={40}/>
+                         <p className="text-[10px] font-black uppercase theme-text-muted">Sem tarefas para energia {userEnergy}</p>
                       </div>
                     );
                   })()}
 
                   <div className="space-y-4">
-                     <h3 className="text-[11px] font-black uppercase theme-text-muted tracking-widest px-2">Fila Bio-Compatível</h3>
+                     <h3 className="text-[10px] font-black uppercase theme-text-muted tracking-widest px-2">Fila Próxima</h3>
                      <div className="space-y-3">
                        {tasks.filter(t => !t.completed && isTaskCompatible(t)).slice(0, 5).map(t => (
-                         <div key={t.id} className="p-4 theme-bg-card border theme-border rounded-3xl flex items-center justify-between hover:border-orange-500/50 transition-all cursor-default shadow-sm group">
+                         <div key={t.id} className="p-3.5 md:p-4 theme-bg-card border theme-border rounded-[24px] md:rounded-3xl flex items-center justify-between hover:border-orange-500/50 transition-all shadow-sm group">
                             <div className="flex items-center gap-3 truncate">
-                              <button onClick={() => setEditingTaskId(t.id)} className="p-1.5 theme-text-muted hover:text-orange-500 opacity-0 group-hover:opacity-100 transition-all">
-                                <Edit3 size={14}/>
+                              <button onClick={() => setEditingTaskId(t.id)} className="p-2 theme-text-muted hover:text-orange-500">
+                                <Edit3 size={16}/>
                               </button>
                               <span className="text-xs font-bold uppercase truncate theme-text-main">{t.text}</span>
                             </div>
-                            <button onClick={() => completeTask(t.id)} className="w-8 h-8 rounded-lg theme-bg-input border theme-border flex items-center justify-center hover:bg-orange-600 transition-all theme-text-main hover:text-white"><Check size={14}/></button>
+                            <button onClick={() => completeTask(t.id)} className="w-10 h-10 rounded-xl theme-bg-input border theme-border flex items-center justify-center hover:bg-orange-600 transition-all theme-text-main hover:text-white"><Check size={18}/></button>
                          </div>
                        ))}
                      </div>
@@ -595,25 +635,25 @@ const App: React.FC = () => {
           )}
 
           {activeTab === 'plan' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in pb-10">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 animate-in fade-in pb-10">
               {[
                 { q: Priority.Q1, label: 'Crise & Foco', color: 'border-red-500/30 theme-bg-card', text: 'text-red-500' },
                 { q: Priority.Q2, label: 'Estratégico', color: 'border-orange-500/30 theme-bg-card', text: 'text-orange-500' },
                 { q: Priority.Q3, label: 'Interrupções', color: 'border-blue-500/30 theme-bg-card', text: 'text-blue-500' },
                 { q: Priority.Q4, label: 'Eliminar', color: 'theme-border theme-bg-card', text: 'theme-text-muted' }
               ].map(block => (
-                <div key={block.q} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, block.q)} className={`p-8 rounded-[48px] border min-h-[400px] flex flex-col space-y-6 transition-all duration-300 ${block.color} hover:border-slate-500/50 shadow-sm`}>
-                  <h3 className={`text-xl font-black uppercase italic tracking-tighter ${block.text}`}>{block.label}</h3>
+                <div key={block.q} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, block.q)} className={`p-6 md:p-8 rounded-[32px] md:rounded-[48px] border min-h-[300px] md:min-h-[400px] flex flex-col space-y-6 transition-all duration-300 ${block.color} shadow-sm`}>
+                  <h3 className={`text-lg md:text-xl font-black uppercase italic tracking-tighter ${block.text}`}>{block.label}</h3>
                   <div className="flex-1 space-y-3 overflow-y-auto no-scrollbar">
                     {tasks.filter(t => t.priority === block.q && !t.completed).map(t => (
-                      <div key={t.id} draggable={!t.isRefining} onDragStart={(e) => handleDragStart(e, t.id)} onClick={() => !t.isRefining && setEditingTaskId(t.id)} className={`p-5 rounded-2xl border cursor-pointer group transition-all transform active:scale-95 ${isTaskCompatible(t) && !t.isRefining ? 'theme-bg-input theme-border shadow-sm' : 'opacity-50 theme-bg-body'} ${t.isRefining ? 'animate-pulse' : ''}`}>
+                      <div key={t.id} draggable={!t.isRefining} onDragStart={(e) => handleDragStart(e, t.id)} onClick={() => !t.isRefining && setEditingTaskId(t.id)} className={`p-4 md:p-5 rounded-2xl border cursor-pointer transition-all transform active:scale-95 ${isTaskCompatible(t) && !t.isRefining ? 'theme-bg-input theme-border shadow-sm' : 'opacity-50 theme-bg-body'} ${t.isRefining ? 'animate-pulse' : ''}`}>
                         <div className="flex justify-between items-center">
-                          <span className="text-xs font-black uppercase theme-text-main">{t.text}</span>
-                          {!t.isRefining ? <GripVertical size={14} className="theme-text-muted opacity-30 group-hover:opacity-100"/> : <Loader2 size={14} className="animate-spin text-orange-500"/>}
+                          <span className="text-[11px] md:text-xs font-black uppercase theme-text-main truncate">{t.text}</span>
+                          {!t.isRefining ? <GripVertical size={14} className="theme-text-muted opacity-30"/> : <Loader2 size={14} className="animate-spin text-orange-500"/>}
                         </div>
-                        <div className="flex gap-2 mt-3">
-                           <span className="text-[8px] font-black uppercase theme-bg-body px-2 py-0.5 rounded-full theme-text-muted border theme-border">{t.energy} Energia</span>
-                           {t.subtasks.length > 0 && <span className="text-[8px] font-black uppercase theme-bg-body px-2 py-0.5 rounded-full text-blue-500 border theme-border">{t.subtasks.length} Subtarefas</span>}
+                        <div className="flex gap-2 mt-3 overflow-x-auto no-scrollbar">
+                           <span className="text-[7px] md:text-[8px] font-black uppercase theme-bg-body px-2 py-1 rounded-full theme-text-muted border theme-border whitespace-nowrap">{t.energy} Energia</span>
+                           {t.subtasks.length > 0 && <span className="text-[7px] md:text-[8px] font-black uppercase theme-bg-body px-2 py-1 rounded-full text-blue-500 border theme-border whitespace-nowrap">{t.subtasks.length} Passos</span>}
                         </div>
                       </div>
                     ))}
@@ -632,59 +672,59 @@ const App: React.FC = () => {
 
       {/* TUTORIAL MODAL OVERLAY */}
       {tutorialStep !== null && TUTORIAL_DATA[activeTab] && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-6 bg-black/80 backdrop-blur-xl animate-in fade-in duration-500">
-           <div className="w-full max-w-lg theme-bg-card border-2 border-orange-500 shadow-glow-orange rounded-[48px] p-8 md:p-12 flex flex-col items-center text-center space-y-8 relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-full h-2 flex gap-1">
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 md:p-6 bg-black/80 backdrop-blur-xl animate-in fade-in duration-500">
+           <div className="w-full max-w-lg theme-bg-card border-2 border-orange-500 shadow-glow-orange rounded-[32px] md:rounded-[48px] p-6 md:p-12 flex flex-col items-center text-center space-y-6 md:space-y-8 relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-1.5 md:h-2 flex gap-1">
                  {TUTORIAL_DATA[activeTab].steps.map((_, i) => (
                     <div key={i} className={`flex-1 h-full transition-all duration-500 ${i <= tutorialStep ? 'bg-orange-500' : 'theme-bg-body'}`}></div>
                  ))}
               </div>
 
-              <div className="w-20 h-20 bg-orange-600/10 rounded-full flex items-center justify-center border border-orange-500/30 text-orange-500 synapse-core">
-                 <BrainIcon size={40}/>
+              <div className="w-16 h-16 md:w-20 md:h-20 bg-orange-600/10 rounded-full flex items-center justify-center border border-orange-500/30 text-orange-500 synapse-core">
+                 <BrainIcon size={32}/>
               </div>
 
-              <div className="space-y-2">
-                 <h2 className="text-3xl font-black uppercase italic tracking-tighter text-orange-500">{TUTORIAL_DATA[activeTab].title}</h2>
-                 <p className="text-[10px] font-black uppercase theme-text-muted tracking-[0.3em]">Módulo de Aprendizado {tutorialStep + 1}/{TUTORIAL_DATA[activeTab].steps.length}</p>
+              <div className="space-y-1">
+                 <h2 className="text-xl md:text-3xl font-black uppercase italic tracking-tighter text-orange-500">{TUTORIAL_DATA[activeTab].title}</h2>
+                 <p className="text-[8px] md:text-[10px] font-black uppercase theme-text-muted tracking-widest">Módulo {tutorialStep + 1}/{TUTORIAL_DATA[activeTab].steps.length}</p>
               </div>
 
-              <div className="space-y-6">
-                 <p className="text-2xl font-bold leading-tight theme-text-main">
+              <div className="space-y-6 w-full max-h-[50vh] overflow-y-auto no-scrollbar px-1">
+                 <p className="text-lg md:text-2xl font-bold leading-tight theme-text-main">
                     {TUTORIAL_DATA[activeTab].steps[tutorialStep].text}
                  </p>
 
-                 <div className="p-6 theme-bg-input rounded-3xl border theme-border w-full text-left space-y-4">
+                 <div className="p-4 md:p-6 theme-bg-input rounded-2xl md:rounded-3xl border theme-border w-full text-left space-y-4">
                     <div className="flex items-center gap-2 text-orange-400">
-                       <BookOpenCheck size={18}/>
-                       <span className="text-[10px] font-black uppercase tracking-widest">Base Neuropsicológica</span>
+                       <BookOpenCheck size={16}/>
+                       <span className="text-[9px] font-black uppercase tracking-widest">Fato Neural</span>
                     </div>
-                    <p className="text-sm theme-text-main leading-relaxed italic">
+                    <p className="text-xs md:text-sm theme-text-main leading-relaxed italic">
                        {TUTORIAL_DATA[activeTab].steps[tutorialStep].concept}
                     </p>
                     
                     <div className="pt-2 flex items-start gap-3 border-t theme-border">
                        <div className="mt-1 text-green-500"><Zap size={14}/></div>
                        <div className="space-y-0.5">
-                          <p className="text-[9px] font-black uppercase theme-text-muted">Dica de Ação</p>
-                          <p className="text-xs font-semibold theme-text-main">{TUTORIAL_DATA[activeTab].steps[tutorialStep].actionTip}</p>
+                          <p className="text-[8px] font-black uppercase theme-text-muted">Dica de Ação</p>
+                          <p className="text-[11px] font-semibold theme-text-main">{TUTORIAL_DATA[activeTab].steps[tutorialStep].actionTip}</p>
                        </div>
                     </div>
                  </div>
               </div>
 
-              <div className="flex w-full gap-4">
+              <div className="flex w-full gap-3 md:gap-4 mt-auto">
                  <button 
                    onClick={() => tutorialStep > 0 ? setTutorialStep(tutorialStep - 1) : setTutorialStep(null)} 
-                   className="flex-1 py-5 rounded-3xl font-black uppercase text-[11px] border theme-border hover:theme-bg-body transition-all theme-text-muted"
+                   className="flex-1 py-4 md:py-5 rounded-2xl md:rounded-3xl font-black uppercase text-[10px] border theme-border transition-all theme-text-muted"
                  > 
                    {tutorialStep === 0 ? "Fechar" : "Voltar"}
                  </button>
                  <button 
                    onClick={() => tutorialStep < TUTORIAL_DATA[activeTab].steps.length - 1 ? setTutorialStep(tutorialStep + 1) : setTutorialStep(null)} 
-                   className="flex-1 py-5 bg-orange-600 rounded-3xl font-black uppercase text-[11px] shadow-glow-orange hover:scale-105 active:scale-95 transition-all text-white"
+                   className="flex-1 py-4 md:py-5 bg-orange-600 rounded-2xl md:rounded-3xl font-black uppercase text-[10px] shadow-glow-orange hover:scale-105 active:scale-95 transition-all text-white"
                  > 
-                   {tutorialStep < TUTORIAL_DATA[activeTab].steps.length - 1 ? "Próximo Passo" : "Entendi e Vou Praticar"}
+                   {tutorialStep < TUTORIAL_DATA[activeTab].steps.length - 1 ? "Próximo" : "Praticar"}
                  </button>
               </div>
            </div>
@@ -693,37 +733,37 @@ const App: React.FC = () => {
 
       {/* TASK DETAIL EDITOR MODAL */}
       {editingTask && (
-        <div className="fixed inset-0 z-[8000] flex items-center justify-center p-6 bg-black/70 backdrop-blur-md animate-in fade-in">
-           <div className="w-full max-w-2xl theme-bg-card border theme-border rounded-[48px] overflow-hidden flex flex-col max-h-[90vh] shadow-2xl">
-              <div className="p-8 border-b theme-border flex justify-between items-center bg-black/5">
-                 <div className="flex items-center gap-4 text-orange-600">
-                    <Edit3 size={24}/>
-                    <h2 className="text-2xl font-black uppercase italic tracking-tighter">Andaimação Neural</h2>
+        <div className="fixed inset-0 z-[8000] flex items-center justify-center p-4 md:p-6 bg-black/70 backdrop-blur-md animate-in fade-in">
+           <div className="w-full max-w-2xl theme-bg-card border theme-border rounded-[32px] md:rounded-[48px] overflow-hidden flex flex-col max-h-[95vh] shadow-2xl">
+              <div className="p-6 md:p-8 border-b theme-border flex justify-between items-center bg-black/5">
+                 <div className="flex items-center gap-3 text-orange-600">
+                    <Edit3 size={20}/>
+                    <h2 className="text-lg md:text-2xl font-black uppercase italic tracking-tighter">Andaimação Neural</h2>
                  </div>
                  <button onClick={() => setEditingTaskId(null)} className="p-2 theme-text-muted hover:bg-black/10 rounded-full transition-colors">
                     <X size={24}/>
                  </button>
               </div>
               
-              <div className="flex-1 overflow-y-auto p-8 md:p-10 space-y-8 no-scrollbar">
+              <div className="flex-1 overflow-y-auto p-6 md:p-10 space-y-6 md:space-y-8 no-scrollbar">
                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase theme-text-muted tracking-widest">Intenção da Tarefa</label>
+                    <label className="text-[9px] font-black uppercase theme-text-muted tracking-widest">Intenção</label>
                     <input 
-                      className="w-full theme-bg-input border theme-border p-4 rounded-2xl text-xl font-bold focus:border-orange-600 outline-none theme-text-main" 
+                      className="w-full theme-bg-input border theme-border p-4 rounded-xl md:rounded-2xl text-lg md:text-xl font-bold focus:border-orange-600 outline-none theme-text-main" 
                       value={editingTask.text} 
                       onChange={e => updateTaskDetails(editingTask.id, { text: e.target.value })} 
                     />
                  </div>
 
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                     <div className="space-y-2">
-                       <label className="text-[10px] font-black uppercase theme-text-muted tracking-widest">Demanda Energética</label>
+                       <label className="text-[9px] font-black uppercase theme-text-muted tracking-widest">Bio-Energia</label>
                        <div className="flex gap-2">
                           {['Baixa', 'Média', 'Alta'].map(ev => (
                             <button 
                               key={ev} 
                               onClick={() => updateTaskDetails(editingTask.id, { energy: ev as any })} 
-                              className={`flex-1 py-3 rounded-xl text-[9px] font-black uppercase border transition-all ${editingTask.energy === ev ? 'bg-orange-600 border-orange-500 text-white shadow-glow-orange' : 'theme-bg-input theme-text-muted theme-border hover:border-slate-500'}`}
+                              className={`flex-1 py-3 rounded-xl text-[9px] font-black uppercase border transition-all ${editingTask.energy === ev ? 'bg-orange-600 border-orange-500 text-white shadow-glow-orange' : 'theme-bg-input theme-text-muted theme-border'}`}
                             > 
                               {ev} 
                             </button>
@@ -731,13 +771,13 @@ const App: React.FC = () => {
                        </div>
                     </div>
                     <div className="space-y-2">
-                       <label className="text-[10px] font-black uppercase theme-text-muted tracking-widest">Prioridade Eisenhower</label>
+                       <label className="text-[9px] font-black uppercase theme-text-muted tracking-widest">Prioridade</label>
                        <div className="flex gap-2">
                           {Object.values(Priority).map(p => (
                             <button 
                               key={p} 
                               onClick={() => updateTaskDetails(editingTask.id, { priority: p })} 
-                              className={`flex-1 py-3 rounded-xl text-[9px] font-black uppercase border transition-all ${editingTask.priority === p ? 'bg-blue-600 border-blue-500 text-white shadow-glow-blue' : 'theme-bg-input theme-text-muted theme-border hover:border-slate-500'}`}
+                              className={`flex-1 py-3 rounded-xl text-[9px] font-black uppercase border transition-all ${editingTask.priority === p ? 'bg-blue-600 border-blue-500 text-white shadow-glow-blue' : 'theme-bg-input theme-text-muted theme-border'}`}
                             > 
                               {p} 
                             </button>
@@ -747,10 +787,10 @@ const App: React.FC = () => {
                  </div>
 
                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase theme-text-muted tracking-widest">Notas de Execução</label>
+                    <label className="text-[9px] font-black uppercase theme-text-muted tracking-widest">Contexto (Notas)</label>
                     <textarea 
-                      className="w-full theme-bg-input border theme-border p-4 rounded-2xl min-h-[100px] text-sm focus:border-orange-600 outline-none resize-none theme-text-main" 
-                      placeholder="Adicione detalhes, links ou contexto para reduzir a carga cognitiva no momento da ação..." 
+                      className="w-full theme-bg-input border theme-border p-4 rounded-xl md:rounded-2xl min-h-[80px] text-sm focus:border-orange-600 outline-none resize-none theme-text-main" 
+                      placeholder="Reduza a carga cognitiva aqui..." 
                       value={editingTask.notes || ""} 
                       onChange={e => updateTaskDetails(editingTask.id, { notes: e.target.value })} 
                     />
@@ -758,21 +798,21 @@ const App: React.FC = () => {
 
                  <div className="space-y-4">
                     <div className="flex justify-between items-center">
-                       <label className="text-[10px] font-black uppercase theme-text-muted tracking-widest">Micro-passos (Subtarefas)</label>
+                       <label className="text-[9px] font-black uppercase theme-text-muted tracking-widest">Micro-passos</label>
                        <button 
                          onClick={() => updateTaskDetails(editingTask.id, { subtasks: [...editingTask.subtasks, ""] })}
                          className="text-[9px] font-black uppercase text-orange-500 hover:text-orange-600 flex items-center gap-1"
                        >
-                         <Plus size={12}/> Adicionar Passo
+                         <Plus size={12}/> Adicionar
                        </button>
                     </div>
                     <div className="space-y-2">
                        {editingTask.subtasks.map((st, i) => (
                          <div key={i} className="flex gap-2 items-center">
                             <input 
-                              className="flex-1 theme-bg-input border theme-border p-3 rounded-xl text-xs focus:border-blue-500 outline-none theme-text-main" 
+                              className="flex-1 theme-bg-input border theme-border p-3 rounded-xl text-[11px] md:text-xs focus:border-blue-500 outline-none theme-text-main" 
                               value={st} 
-                              placeholder="Passo simples e concreto..."
+                              placeholder="Passo concreto..."
                               onChange={e => { 
                                 const newSt = [...editingTask.subtasks]; 
                                 newSt[i] = e.target.value; 
@@ -791,27 +831,27 @@ const App: React.FC = () => {
                          </div>
                        ))}
                        {editingTask.subtasks.length === 0 && (
-                          <p className="text-center py-4 text-[10px] font-black uppercase theme-text-muted border border-dashed theme-border rounded-xl">
-                             Nenhum micro-passo definido. Decompor tarefas ajuda a vencer a procrastinação.
-                          </p>
+                          <div className="text-center py-6 border border-dashed theme-border rounded-xl">
+                             <p className="text-[9px] font-black uppercase theme-text-muted">Decomponha para vencer a paralisia.</p>
+                          </div>
                        )}
                     </div>
                  </div>
               </div>
 
-              <div className="p-8 border-t theme-border flex gap-4 bg-black/5">
+              <div className="p-6 md:p-8 border-t theme-border flex gap-3 md:gap-4 bg-black/5">
                  <button 
                    onClick={() => completeTask(editingTask.id)} 
-                   className="flex-1 py-4 bg-green-600 rounded-2xl font-black uppercase text-xs shadow-glow-green hover:scale-105 active:scale-95 transition-all text-white"
+                   className="flex-1 py-4 bg-green-600 rounded-xl md:rounded-2xl font-black uppercase text-[11px] shadow-glow-green hover:scale-105 active:scale-95 transition-all text-white"
                  >
-                   Completar Tarefa
+                   Concluir
                  </button>
                  <button 
                    onClick={() => { 
                      setTasks(tasks.filter(t => t.id !== editingTask.id)); 
                      setEditingTaskId(null); 
                    }} 
-                   className="px-6 py-4 bg-red-600/10 text-red-500 rounded-2xl font-black uppercase text-[10px] hover:bg-red-600 hover:text-white transition-all"
+                   className="px-5 py-4 bg-red-600/10 text-red-500 rounded-xl md:rounded-2xl font-black uppercase text-[10px] hover:bg-red-600 hover:text-white transition-all"
                  >
                    <Trash2 size={20}/>
                  </button>
@@ -820,15 +860,15 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* MOBILE NAV */}
-      <nav className="md:hidden fixed bottom-0 left-0 w-full theme-bg-sidebar backdrop-blur-xl border-t z-50 flex overflow-x-auto no-scrollbar px-4 py-3 gap-6 shadow-2xl">
-        <MobIcon icon={<ListTodo/>} active={activeTab === 'capture'} onClick={() => setActiveTab('capture')}/>
-        <MobIcon icon={<Timer/>} active={activeTab === 'execute'} onClick={() => setActiveTab('execute')}/>
-        <MobIcon icon={<LayoutGrid/>} active={activeTab === 'plan'} onClick={() => setActiveTab('plan')}/>
-        <MobIcon icon={<CalendarRange/>} active={activeTab === 'fixed'} onClick={() => setActiveTab('fixed')}/>
-        <MobIcon icon={<RefreshCw/>} active={activeTab === 'habits'} onClick={() => setActiveTab('habits')}/>
-        <MobIcon icon={<TrendingUp/>} active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')}/>
-        <MobIcon icon={<Binary/>} active={activeTab === 'upgrades'} onClick={() => setActiveTab('upgrades')}/>
+      {/* MOBILE BOTTOM NAV */}
+      <nav className="md:hidden fixed bottom-0 left-0 w-full theme-bg-sidebar backdrop-blur-2xl border-t theme-border z-[60] flex overflow-x-auto no-scrollbar px-4 py-2 justify-between items-center shadow-2xl">
+        <MobIcon icon={<ListTodo/>} label="Input" active={activeTab === 'capture'} onClick={() => setActiveTab('capture')}/>
+        <MobIcon icon={<Timer/>} label="Fluxo" active={activeTab === 'execute'} onClick={() => setActiveTab('execute')}/>
+        <MobIcon icon={<LayoutGrid/>} label="Matriz" active={activeTab === 'plan'} onClick={() => setActiveTab('plan')}/>
+        <MobIcon icon={<CalendarRange/>} label="Ciclo" active={activeTab === 'fixed'} onClick={() => setActiveTab('fixed')}/>
+        <MobIcon icon={<RefreshCw/>} label="Hábito" active={activeTab === 'habits'} onClick={() => setActiveTab('habits')}/>
+        <MobIcon icon={<TrendingUp/>} label="Status" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')}/>
+        <MobIcon icon={<Binary/>} label="Mods" active={activeTab === 'upgrades'} onClick={() => setActiveTab('upgrades')}/>
       </nav>
 
       {showHabitForm && <HabitForm habits={habits} setHabits={setHabits} setShowForm={setShowHabitForm} editingHabitId={editingHabitId} setEditingHabitId={setEditingHabitId} />}
@@ -840,33 +880,33 @@ const App: React.FC = () => {
 /* VIEW COMPONENTS */
 
 const HabitsView = ({ habits, setHabits, setPoints, playAudio, setShowHabitForm, onEdit, onDelete }: any) => (
-  <div className="space-y-10 animate-in fade-in pb-10 px-4 md:px-0">
-    <div className="flex justify-between items-end">
-      <div><h2 className="text-4xl md:text-5xl font-black uppercase italic text-orange-600 tracking-tighter">Mielinização</h2><p className="text-[11px] font-black theme-text-muted uppercase tracking-widest mt-1">Repetição para automação neural.</p></div>
-      <button onClick={() => setShowHabitForm(true)} className="w-14 h-14 bg-orange-600 rounded-2xl flex items-center justify-center shadow-glow-orange hover:scale-110 active:scale-95 transition-all text-white"><Plus/></button>
+  <div className="space-y-10 animate-in fade-in pb-10">
+    <div className="flex justify-between items-end px-2 md:px-0">
+      <div><h2 className="text-3xl md:text-5xl font-black uppercase italic text-orange-600 tracking-tighter">Mielinização</h2><p className="text-[10px] md:text-[11px] font-black theme-text-muted uppercase tracking-widest mt-1">Repetição para automação.</p></div>
+      <button onClick={() => setShowHabitForm(true)} className="w-12 h-12 md:w-14 md:h-14 bg-orange-600 rounded-2xl flex items-center justify-center shadow-glow-orange hover:scale-110 active:scale-95 transition-all text-white"><Plus/></button>
     </div>
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
       {habits.map((h: any) => {
         const today = new Date().toISOString().split('T')[0];
         const doneToday = h.lastCompleted === today;
         return (
-          <div key={h.id} className="p-8 theme-bg-card border theme-border rounded-[48px] space-y-6 relative group/card hover:border-orange-500/30 transition-all shadow-sm">
+          <div key={h.id} className="p-6 md:p-8 theme-bg-card border theme-border rounded-[32px] md:rounded-[48px] space-y-6 relative group/card hover:border-orange-500/30 transition-all shadow-sm mx-1 md:mx-0">
             <div className="flex justify-between items-start">
-              <h4 className="text-xl font-black uppercase pr-12 theme-text-main leading-tight">{h.identity}</h4>
+              <h4 className="text-lg md:text-xl font-black uppercase pr-10 theme-text-main leading-tight">{h.identity}</h4>
               <div className="flex gap-1 mt-1">
                 {Array.from({length: 3}).map((_, i) => (
-                   <div key={i} className={`w-2.5 h-2.5 rounded-full ${h.streak > i ? 'bg-orange-500 shadow-glow-orange' : 'theme-bg-body'}`}/>
+                   <div key={i} className={`w-2 h-2 md:w-2.5 md:h-2.5 rounded-full ${h.streak > i ? 'bg-orange-500 shadow-glow-orange' : 'theme-bg-body'}`}/>
                 ))}
               </div>
             </div>
             
-            <div className="absolute top-8 right-8 flex gap-2 opacity-0 group-hover/card:opacity-100 transition-opacity">
-              <button onClick={() => onEdit(h.id)} className="p-2 theme-text-muted hover:text-orange-500 hover:bg-orange-500/10 rounded-lg transition-all"><Edit3 size={16}/></button>
-              <button onClick={() => onDelete(h.id)} className="p-2 theme-text-muted hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all"><Trash2 size={16}/></button>
+            <div className="absolute top-6 right-6 flex gap-1">
+              <button onClick={() => onEdit(h.id)} className="p-2 theme-text-muted hover:text-orange-500 transition-all"><Edit3 size={16}/></button>
+              <button onClick={() => onDelete(h.id)} className="p-2 theme-text-muted hover:text-red-500 transition-all"><Trash2 size={16}/></button>
             </div>
 
-            <p className="text-xs italic theme-text-muted border-l-2 theme-border pl-3">"{h.text}"</p>
-            <button onClick={() => { if (h.lastCompleted === today) return; setHabits(habits.map((item: any) => item.id === h.id ? {...item, streak: item.streak + 1, lastCompleted: today} : item)); setPoints((p: number) => p + 50); playAudio(SOUNDS.HABIT_COMPLETE); }} disabled={doneToday} className={`w-full py-4 rounded-2xl font-black uppercase text-[11px] transition-all tracking-widest ${doneToday ? 'bg-green-600/10 text-green-500 border border-green-500/20' : 'bg-orange-600 shadow-glow-orange hover:scale-105 active:scale-95 text-white'}`}> {doneToday ? 'Neuralizado Hoje' : 'Reforçar Identidade'} </button>
+            <p className="text-[11px] md:text-xs italic theme-text-muted border-l-2 theme-border pl-3">"{h.text}"</p>
+            <button onClick={() => { if (h.lastCompleted === today) return; setHabits(habits.map((item: any) => item.id === h.id ? {...item, streak: item.streak + 1, lastCompleted: today} : item)); setPoints((p: number) => p + 50); playAudio(SOUNDS.HABIT_COMPLETE); }} disabled={doneToday} className={`w-full py-4 rounded-xl md:rounded-2xl font-black uppercase text-[10px] md:text-[11px] transition-all tracking-widest ${doneToday ? 'bg-green-600/10 text-green-500 border border-green-500/20' : 'bg-orange-600 shadow-glow-orange hover:scale-105 active:scale-95 text-white'}`}> {doneToday ? 'Neuralizado Hoje' : 'Reforçar'} </button>
           </div>
         )
       })}
@@ -884,27 +924,26 @@ const FixedView = ({ recurringTasks, setRecurringTasks, currentPeriod, setPoints
   };
 
   return (
-    <div className="space-y-12 animate-in fade-in pb-10 px-4 md:px-0">
-      <div className="flex justify-between items-end">
-        <div><h2 className="text-4xl md:text-5xl font-black uppercase italic text-purple-400 tracking-tighter">Bio-Ciclos</h2><p className="text-[11px] font-black theme-text-muted uppercase tracking-widest mt-1">Sincronia circadiana e estrutural.</p></div>
-        <button onClick={() => setShowRecurringForm(true)} className="w-14 h-14 bg-purple-600 rounded-2xl flex items-center justify-center shadow-glow-blue hover:scale-110 active:scale-95 transition-all text-white"><Plus/></button>
+    <div className="space-y-12 animate-in fade-in pb-10">
+      <div className="flex justify-between items-end px-2 md:px-0">
+        <div><h2 className="text-3xl md:text-5xl font-black uppercase italic text-purple-400 tracking-tighter">Bio-Ciclos</h2><p className="text-[10px] md:text-[11px] font-black theme-text-muted uppercase tracking-widest mt-1">Sincronia circadiana.</p></div>
+        <button onClick={() => setShowRecurringForm(true)} className="w-12 h-12 md:w-14 md:h-14 bg-purple-600 rounded-2xl flex items-center justify-center shadow-glow-blue hover:scale-110 active:scale-95 transition-all text-white"><Plus/></button>
       </div>
-      <div className="space-y-8">
+      <div className="space-y-6">
         {(['Morning', 'Day', 'Evening', 'Night'] as DayPeriod[]).map(p => {
           const periodTasks = recurringTasks.filter((rt: any) => rt.period === p);
           if (periodTasks.length === 0 && currentPeriod !== p) return null;
 
           return (
-            <div key={p} className={`p-6 md:p-8 rounded-[40px] border transition-all duration-500 ${currentPeriod === p ? 'theme-bg-card border-purple-500/40 shadow-xl' : 'opacity-60 theme-bg-body grayscale theme-border'}`}>
+            <div key={p} className={`p-5 md:p-8 rounded-[32px] md:rounded-[40px] border transition-all duration-500 mx-1 md:mx-0 ${currentPeriod === p ? 'theme-bg-card border-purple-500/40 shadow-xl' : 'opacity-60 theme-bg-body grayscale theme-border'}`}>
               <div className="flex items-center gap-3 mb-6">
-                 {p === 'Morning' && <Sunrise className="text-purple-400" size={20}/>}
-                 {p === 'Day' && <Sun className="text-purple-400" size={20}/>}
-                 {p === 'Evening' && <Sunset className="text-purple-400" size={20}/>}
-                 {p === 'Night' && <MoonStar className="text-purple-400" size={20}/>}
-                 <h3 className="font-black uppercase text-sm text-purple-400 tracking-widest italic">{PERIOD_LABELS[p]}</h3>
-                 {currentPeriod === p && <span className="text-[8px] font-black uppercase bg-purple-500 text-white px-2 py-0.5 rounded-full animate-pulse">Ativo</span>}
+                 {p === 'Morning' && <Sunrise className="text-purple-400" size={18}/>}
+                 {p === 'Day' && <Sun className="text-purple-400" size={18}/>}
+                 {p === 'Evening' && <Sunset className="text-purple-400" size={18}/>}
+                 {p === 'Night' && <MoonStar className="text-purple-400" size={18}/>}
+                 <h3 className="font-black uppercase text-[11px] md:text-sm text-purple-400 tracking-widest italic">{PERIOD_LABELS[p]}</h3>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
                 {periodTasks.map((rt: any) => {
                    const todayStr = new Date().toISOString().split('T')[0];
                    const done = rt.completedDates.includes(todayStr);
@@ -913,29 +952,24 @@ const FixedView = ({ recurringTasks, setRecurringTasks, currentPeriod, setPoints
                    return (
                     <div 
                       key={rt.id} 
-                      className={`p-5 rounded-3xl flex justify-between items-center group transition-all border ${done ? 'grayscale opacity-50 theme-bg-body' : 'theme-bg-input theme-border hover:border-purple-500/50'} ${isToday && !done ? 'border-purple-500/50 shadow-md scale-[1.01]' : ''}`}
+                      className={`p-4 md:p-5 rounded-2xl md:rounded-3xl flex justify-between items-center transition-all border ${done ? 'grayscale opacity-50 theme-bg-body' : 'theme-bg-input theme-border'} ${isToday && !done ? 'border-purple-500/50 shadow-md' : ''}`}
                     >
-                      <div className="flex flex-col gap-1.5 overflow-hidden">
+                      <div className="flex flex-col gap-1 overflow-hidden">
                         <div className="flex items-center gap-2">
-                          <span className={`text-xs md:text-sm font-bold uppercase truncate ${done ? 'line-through theme-text-muted' : 'theme-text-main'}`}>{rt.text}</span>
-                          {isToday && !done && <span className="text-[8px] font-black uppercase bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded">Hoje</span>}
+                          <span className={`text-[11px] md:text-sm font-bold uppercase truncate ${done ? 'line-through theme-text-muted' : 'theme-text-main'}`}>{rt.text}</span>
+                          {isToday && !done && <div className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse"></div>}
                         </div>
-                        <div className="flex items-center gap-3">
-                           <span className="text-[8px] font-black uppercase theme-text-muted bg-black/5 theme-bg-body px-2 py-0.5 rounded-md">{rt.frequency}</span>
-                        </div>
+                        <span className="text-[7px] md:text-[8px] font-black uppercase theme-text-muted">{rt.frequency}</span>
                       </div>
                       
-                      <div className="flex items-center gap-3">
-                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => onEdit(rt.id)} className="p-2 theme-text-muted hover:text-purple-400 hover:bg-purple-400/10 rounded-lg"><Edit3 size={14}/></button>
-                          <button onClick={() => onDelete(rt.id)} className="p-2 theme-text-muted hover:text-red-500 hover:bg-red-500/10 rounded-lg"><Trash2 size={14}/></button>
-                        </div>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => onEdit(rt.id)} className="p-2 theme-text-muted hover:text-purple-400"><Edit3 size={14}/></button>
                         <div 
                           onClick={() => { 
                             setRecurringTasks(recurringTasks.map((item: any) => item.id === rt.id ? {...item, completedDates: done ? item.completedDates.filter((d: string) => d !== todayStr) : [...item.completedDates, todayStr]} : item)); 
                             if(!done) { setPoints((pts: number) => pts + 25); playAudio(SOUNDS.TASK_COMPLETE); }
                           }} 
-                          className={`w-10 h-10 rounded-xl flex items-center justify-center cursor-pointer transition-all ${done ? 'bg-green-600 shadow-glow-green scale-110 text-white' : 'theme-bg-sidebar border theme-border hover:border-purple-500 theme-text-muted'}`}>{done && <Check size={18}/>}</div>
+                          className={`w-9 h-9 md:w-10 md:h-10 rounded-xl flex items-center justify-center cursor-pointer transition-all ${done ? 'bg-green-600 text-white' : 'theme-bg-sidebar border theme-border theme-text-muted'}`}>{done && <Check size={18}/>}</div>
                       </div>
                     </div>
                    );
@@ -950,38 +984,38 @@ const FixedView = ({ recurringTasks, setRecurringTasks, currentPeriod, setPoints
 };
 
 const DashboardView = ({ tasks, habits, points, achievements }: any) => (
-  <div className="space-y-10 animate-in fade-in pb-10 px-4 md:px-0">
-    <h2 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter theme-text-main">Dashboard Neural</h2>
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-      <StatCard icon={<Target/>} val={tasks.filter((t: any) => t.completed).length} label="Concluídas"/>
-      <StatCard icon={<Flame/>} val={Math.max(...habits.map((h: any) => h.streak), 0)} label="Melhor Streak"/>
-      <StatCard icon={<Gem/>} val={points} label="Neuro-XP"/>
-      <StatCard icon={<Award/>} val={achievements.filter((a: any) => a.unlockedAt).length} label="Conquistas"/>
+  <div className="space-y-10 animate-in fade-in pb-10">
+    <h2 className="text-3xl md:text-5xl font-black uppercase italic tracking-tighter theme-text-main px-2 md:px-0">Status Neural</h2>
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 px-1 md:px-0">
+      <StatCard icon={<Target size={20}/>} val={tasks.filter((t: any) => t.completed).length} label="Tasks"/>
+      <StatCard icon={<Flame size={20}/>} val={Math.max(...habits.map((h: any) => h.streak), 0)} label="Streak"/>
+      <StatCard icon={<Gem size={20}/>} val={points} label="Neuro-XP"/>
+      <StatCard icon={<Award size={20}/>} val={achievements.filter((a: any) => a.unlockedAt).length} label="Mods"/>
     </div>
   </div>
 );
 
 const UpgradesView = ({ upgrades, points, setPoints, setUpgrades, playAudio }: any) => (
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-10 px-4 md:px-0">
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 pb-10">
     {upgrades.map((u: any) => (
-      <div key={u.id} className={`p-8 rounded-[48px] border transition-all ${u.unlocked ? 'border-green-500/30 bg-green-500/5' : 'theme-bg-card theme-border shadow-sm'}`}>
+      <div key={u.id} className={`p-6 md:p-8 rounded-[32px] md:rounded-[48px] border transition-all mx-1 md:mx-0 ${u.unlocked ? 'border-green-500/30 bg-green-500/5' : 'theme-bg-card theme-border shadow-sm'}`}>
         <div className="flex items-center gap-4 mb-4">
-           <div className={`p-4 rounded-2xl ${u.unlocked ? 'bg-green-600 text-white' : 'theme-bg-input theme-text-muted'}`}><ZapBolt size={24}/></div>
-           <h4 className="font-black uppercase text-xl theme-text-main">{u.name}</h4>
+           <div className={`p-3.5 md:p-4 rounded-xl md:rounded-2xl ${u.unlocked ? 'bg-green-600 text-white' : 'theme-bg-input theme-text-muted'}`}><ZapBolt size={24}/></div>
+           <h4 className="font-black uppercase text-lg md:text-xl theme-text-main truncate">{u.name}</h4>
         </div>
-        <p className="text-sm theme-text-muted mb-8 leading-relaxed">{u.description}</p>
-        <button disabled={u.unlocked || points < u.cost} onClick={() => { setPoints(points - u.cost); setUpgrades(upgrades.map((up: any) => up.id === u.id ? {...up, unlocked: true} : up)); playAudio(SOUNDS.UPGRADE); }} className={`w-full py-5 rounded-2xl font-black uppercase text-[11px] tracking-[0.2em] transition-all ${u.unlocked ? 'bg-green-600/20 text-green-500 cursor-default' : 'bg-orange-600 hover:scale-105 active:scale-95 text-white shadow-glow-orange disabled:opacity-30'}`}> {u.unlocked ? 'Integrado' : `${u.cost} XP - Sintetizar`} </button>
+        <p className="text-xs md:text-sm theme-text-muted mb-6 md:mb-8 leading-relaxed line-clamp-2">{u.description}</p>
+        <button disabled={u.unlocked || points < u.cost} onClick={() => { setPoints(points - u.cost); setUpgrades(upgrades.map((up: any) => up.id === u.id ? {...up, unlocked: true} : up)); playAudio(SOUNDS.UPGRADE); }} className={`w-full py-4 md:py-5 rounded-xl md:rounded-2xl font-black uppercase text-[10px] transition-all ${u.unlocked ? 'bg-green-600/20 text-green-500 cursor-default' : 'bg-orange-600 text-white shadow-glow-orange disabled:opacity-30'}`}> {u.unlocked ? 'Ativo' : `${u.cost} XP`} </button>
       </div>
     ))}
   </div>
 );
 
 const StatCard = ({ icon, val, label }: any) => (
-  <div className="p-8 theme-bg-card border theme-border rounded-[48px] flex flex-col items-center gap-4 shadow-sm hover:border-orange-500/50 transition-all">
-    <div className="text-orange-500 p-4 bg-orange-600/10 rounded-2xl">{icon}</div>
+  <div className="p-6 md:p-8 theme-bg-card border theme-border rounded-[32px] md:rounded-[48px] flex flex-col items-center gap-2 md:gap-4 shadow-sm hover:border-orange-500/50 transition-all">
+    <div className="text-orange-500 p-3 bg-orange-600/10 rounded-xl">{icon}</div>
     <div className="text-center">
-      <span className="block text-4xl font-black italic theme-text-main">{val}</span>
-      <span className="text-[10px] font-black theme-text-muted uppercase tracking-[0.2em]">{label}</span>
+      <span className="block text-2xl md:text-4xl font-black italic theme-text-main">{val}</span>
+      <span className="text-[8px] md:text-[10px] font-black theme-text-muted uppercase tracking-widest">{label}</span>
     </div>
   </div>
 );
@@ -991,7 +1025,7 @@ const HabitForm = ({ habits, setHabits, setShowForm, editingHabitId, setEditingH
 
   return (
     <div className="fixed inset-0 z-[9000] flex items-center justify-center p-4 md:p-6 bg-black/60 backdrop-blur-md">
-      <form className="w-full max-w-lg theme-bg-card border theme-border rounded-[48px] p-8 md:p-10 space-y-6 shadow-2xl" onSubmit={e => { 
+      <form className="w-full max-w-lg theme-bg-card border theme-border rounded-[32px] md:rounded-[48px] p-6 md:p-10 space-y-6 shadow-2xl animate-in zoom-in-95 duration-200" onSubmit={e => { 
         e.preventDefault(); 
         const target = e.target as any; 
         if (editingHabitId) {
@@ -1009,29 +1043,29 @@ const HabitForm = ({ habits, setHabits, setShowForm, editingHabitId, setEditingH
         setShowForm(false);
         setEditingHabitId(null);
       }}>
-        <h2 className="text-2xl font-black uppercase text-orange-600 italic">{editingHabitId ? 'Ajustar Mielinização' : 'Novo Hábito'}</h2>
-        <div className="space-y-2">
-          <label className="text-[10px] font-black uppercase theme-text-muted tracking-widest">Identidade</label>
-          <input name="identity" required defaultValue={editingHabit?.identity || ""} className="w-full p-4 rounded-xl theme-bg-input border theme-border theme-text-main outline-none focus:border-orange-500" placeholder="Ex: Sou o tipo de pessoa que..."/>
+        <h2 className="text-xl md:text-2xl font-black uppercase text-orange-600 italic">{editingHabitId ? 'Ajustar Mielinização' : 'Novo Hábito'}</h2>
+        <div className="space-y-1.5">
+          <label className="text-[9px] font-black uppercase theme-text-muted tracking-widest">Eu Sou</label>
+          <input name="identity" required defaultValue={editingHabit?.identity || ""} className="w-full p-4 rounded-xl theme-bg-input border theme-border theme-text-main outline-none focus:border-orange-500 text-sm" placeholder="Ex: Um corredor..."/>
         </div>
-        <div className="space-y-2">
-          <label className="text-[10px] font-black uppercase theme-text-muted tracking-widest">O Hábito</label>
-          <input name="text" required defaultValue={editingHabit?.text || ""} className="w-full p-4 rounded-xl theme-bg-input border theme-border theme-text-main outline-none focus:border-orange-500" placeholder="Ação"/>
+        <div className="space-y-1.5">
+          <label className="text-[9px] font-black uppercase theme-text-muted tracking-widest">Ação</label>
+          <input name="text" required defaultValue={editingHabit?.text || ""} className="w-full p-4 rounded-xl theme-bg-input border theme-border theme-text-main outline-none focus:border-orange-500 text-sm" placeholder="O que fazer?"/>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase theme-text-muted tracking-widest">Âncora</label>
-            <input name="anchor" required defaultValue={editingHabit?.anchor || ""} className="w-full p-4 rounded-xl theme-bg-input border theme-border theme-text-main outline-none focus:border-orange-500" placeholder="Depois de..."/>
+          <div className="space-y-1.5">
+            <label className="text-[9px] font-black uppercase theme-text-muted tracking-widest">Âncora</label>
+            <input name="anchor" required defaultValue={editingHabit?.anchor || ""} className="w-full p-4 rounded-xl theme-bg-input border theme-border theme-text-main outline-none focus:border-orange-500 text-sm" placeholder="Após..."/>
           </div>
-          <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase theme-text-muted tracking-widest">Micro-ação</label>
-            <input name="tinyAction" required defaultValue={editingHabit?.tinyAction || ""} className="w-full p-4 rounded-xl theme-bg-input border theme-border theme-text-main outline-none focus:border-orange-500" placeholder="Vou... (fácil)"/>
+          <div className="space-y-1.5">
+            <label className="text-[9px] font-black uppercase theme-text-muted tracking-widest">Micro</label>
+            <input name="tinyAction" required defaultValue={editingHabit?.tinyAction || ""} className="w-full p-4 rounded-xl theme-bg-input border theme-border theme-text-main outline-none focus:border-orange-500 text-sm" placeholder="Vou..."/>
           </div>
         </div>
-        <button type="submit" className="w-full py-5 bg-orange-600 rounded-2xl font-black uppercase shadow-glow-orange hover:scale-105 active:scale-95 transition-all text-white tracking-widest">
-          {editingHabitId ? 'Atualizar Identidade' : 'Iniciar Repetição'}
+        <button type="submit" className="w-full py-4.5 bg-orange-600 rounded-xl md:rounded-2xl font-black uppercase text-xs shadow-glow-orange text-white tracking-widest py-4">
+          {editingHabitId ? 'Atualizar' : 'Integrar'}
         </button>
-        <button type="button" onClick={() => { setShowForm(false); setEditingHabitId(null); }} className="w-full text-[10px] uppercase font-black theme-text-muted hover:text-orange-500 transition-colors tracking-widest">Cancelar</button>
+        <button type="button" onClick={() => { setShowForm(false); setEditingHabitId(null); }} className="w-full text-[9px] uppercase font-black theme-text-muted hover:text-orange-500 transition-colors py-1">Cancelar</button>
       </form>
     </div>
   );
@@ -1048,7 +1082,7 @@ const RecurringForm = ({ recurringTasks, setRecurringTasks, setShowForm, editing
 
   return (
     <div className="fixed inset-0 z-[9000] flex items-center justify-center p-4 md:p-6 bg-black/60 backdrop-blur-md">
-      <form className="w-full max-w-lg theme-bg-card border theme-border rounded-[48px] p-8 md:p-10 space-y-6 shadow-2xl" onSubmit={e => { 
+      <form className="w-full max-w-lg theme-bg-card border theme-border rounded-[32px] md:rounded-[48px] p-6 md:p-10 space-y-6 shadow-2xl animate-in zoom-in-95 duration-200" onSubmit={e => { 
         e.preventDefault(); 
         const target = e.target as any; 
         if (editingTaskId) {
@@ -1076,38 +1110,38 @@ const RecurringForm = ({ recurringTasks, setRecurringTasks, setShowForm, editing
         setShowForm(false); 
         setEditingTaskId(null);
       }}>
-        <h2 className="text-2xl font-black uppercase text-purple-400 italic">{editingTaskId ? 'Ajustar Ciclo' : 'Nova Rotina'}</h2>
+        <h2 className="text-xl md:text-2xl font-black uppercase text-purple-400 italic">{editingTaskId ? 'Ajustar Ciclo' : 'Nova Rotina'}</h2>
         
-        <div className="space-y-2">
-          <label className="text-[10px] font-black uppercase theme-text-muted tracking-widest">O que se repete?</label>
-          <input name="text" required defaultValue={editingTask?.text || ""} className="w-full p-4 rounded-xl theme-bg-input border theme-border theme-text-main focus:border-purple-500 outline-none" placeholder="Ex: Meditação matinal"/>
+        <div className="space-y-1.5">
+          <label className="text-[9px] font-black uppercase theme-text-muted tracking-widest">Atividade</label>
+          <input name="text" required defaultValue={editingTask?.text || ""} className="w-full p-4 rounded-xl theme-bg-input border theme-border theme-text-main focus:border-purple-500 outline-none text-sm" placeholder="Ex: Treino matinal"/>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase theme-text-muted tracking-widest">Frequência</label>
-            <select value={freq} onChange={(e) => setFreq(e.target.value as Frequency)} className="w-full p-4 rounded-xl theme-bg-input border theme-border font-bold theme-text-main outline-none appearance-none">
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <label className="text-[9px] font-black uppercase theme-text-muted tracking-widest">Frequência</label>
+            <select value={freq} onChange={(e) => setFreq(e.target.value as Frequency)} className="w-full p-4 rounded-xl theme-bg-input border theme-border font-bold theme-text-main outline-none appearance-none text-xs">
               {Object.values(Frequency).map(f => ( <option key={f} value={f} className="theme-bg-card">{f}</option> ))}
             </select>
           </div>
-          <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase theme-text-muted tracking-widest">Bio-Período</label>
-            <select name="period" defaultValue={editingTask?.period || "Day"} className="w-full p-4 rounded-xl theme-bg-input border theme-border font-bold theme-text-main outline-none appearance-none">
+          <div className="space-y-1.5">
+            <label className="text-[9px] font-black uppercase theme-text-muted tracking-widest">Bio-Período</label>
+            <select name="period" defaultValue={editingTask?.period || "Day"} className="w-full p-4 rounded-xl theme-bg-input border theme-border font-bold theme-text-main outline-none appearance-none text-xs">
               {Object.entries(PERIOD_LABELS).map(([val, label]) => ( <option key={val} value={val} className="theme-bg-card">{label}</option> ))}
             </select>
           </div>
         </div>
 
         {freq === Frequency.WEEKLY && (
-          <div className="space-y-2 animate-in slide-in-from-top-2">
-            <label className="text-[10px] font-black uppercase theme-text-muted tracking-widest">Dias da Semana</label>
+          <div className="space-y-2">
+            <label className="text-[9px] font-black uppercase theme-text-muted tracking-widest">Dias</label>
             <div className="flex justify-between gap-1">
               {WEEK_DAYS.map((d, idx) => (
                 <button 
                   key={idx} 
                   type="button" 
                   onClick={() => toggleDay(idx)}
-                  className={`flex-1 py-3 rounded-xl text-xs font-black transition-all border ${selectedDays.includes(idx) ? 'bg-purple-600 border-purple-500 shadow-glow-blue text-white' : 'theme-bg-input theme-border theme-text-muted'}`}
+                  className={`flex-1 py-2.5 rounded-lg text-[10px] font-black transition-all border ${selectedDays.includes(idx) ? 'bg-purple-600 border-purple-500 shadow-glow-blue text-white' : 'theme-bg-input theme-border theme-text-muted'}`}
                 >
                   {d}
                 </button>
@@ -1116,19 +1150,19 @@ const RecurringForm = ({ recurringTasks, setRecurringTasks, setShowForm, editing
           </div>
         )}
 
-        <div className="space-y-2">
-           <label className="text-[10px] font-black uppercase theme-text-muted tracking-widest">Energia Necessária</label>
-           <select name="energy" defaultValue={editingTask?.energy || "Média"} className="w-full p-4 rounded-xl theme-bg-input border theme-border font-bold theme-text-main outline-none appearance-none">
+        <div className="space-y-1.5">
+           <label className="text-[9px] font-black uppercase theme-text-muted tracking-widest">Energia</label>
+           <select name="energy" defaultValue={editingTask?.energy || "Média"} className="w-full p-4 rounded-xl theme-bg-input border theme-border font-bold theme-text-main outline-none appearance-none text-xs">
               <option value="Baixa" className="theme-bg-card">Baixa</option>
               <option value="Média" className="theme-bg-card">Média</option>
               <option value="Alta" className="theme-bg-card">Alta</option>
            </select>
         </div>
 
-        <button type="submit" className="w-full py-5 bg-purple-600 rounded-2xl font-black shadow-glow-blue hover:scale-105 active:scale-95 transition-all uppercase text-white tracking-widest">
-          {editingTaskId ? 'Salvar Alterações' : 'Sintetizar Ciclo'}
+        <button type="submit" className="w-full py-4 bg-purple-600 rounded-xl md:rounded-2xl font-black shadow-glow-blue text-white tracking-widest text-xs uppercase">
+          {editingTaskId ? 'Salvar' : 'Sintetizar'}
         </button>
-        <button type="button" onClick={() => { setShowForm(false); setEditingTaskId(null); }} className="w-full text-[10px] uppercase font-black theme-text-muted hover:text-purple-400 transition-colors tracking-widest">Cancelar</button>
+        <button type="button" onClick={() => { setShowForm(false); setEditingTaskId(null); }} className="w-full text-[9px] uppercase font-black theme-text-muted hover:text-purple-400 transition-colors py-1">Cancelar</button>
       </form>
     </div>
   );
@@ -1138,8 +1172,11 @@ const NavBtn: React.FC<{ icon: React.ReactNode, label: string, active: boolean, 
   <button onClick={onClick} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-black uppercase text-[11px] tracking-widest transition-all ${active ? 'bg-orange-600 text-white shadow-lg scale-105 shadow-glow-orange' : 'theme-text-muted hover:bg-black/5 hover:theme-bg-input'}`}>{icon} {label}</button>
 );
 
-const MobIcon: React.FC<{ icon: React.ReactNode, active: boolean, onClick: () => void }> = ({ icon, active, onClick }) => (
-  <button onClick={onClick} className={`flex-shrink-0 p-4 rounded-2xl transition-all ${active ? 'bg-orange-600 text-white scale-110 shadow-lg shadow-glow-orange' : 'theme-text-muted hover:bg-black/5'}`}>{icon}</button>
+const MobIcon: React.FC<{ icon: React.ReactNode, label: string, active: boolean, onClick: () => void }> = ({ icon, label, active, onClick }) => (
+  <button onClick={onClick} className={`flex-1 flex flex-col items-center justify-center py-2 transition-all ${active ? 'theme-text-main' : 'theme-text-muted'}`}>
+     <div className={`p-2 rounded-xl transition-all ${active ? 'bg-orange-600 text-white shadow-glow-orange scale-110' : 'theme-bg-input/30'}`}>{icon}</div>
+     <span className="text-[8px] font-black uppercase mt-1 tracking-tighter">{label}</span>
+  </button>
 );
 
 const SynapseLogo = () => (
