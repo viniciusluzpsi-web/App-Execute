@@ -42,7 +42,7 @@ const TUTORIAL_DATA: Record<string, { title: string, steps: { target: string, te
   capture: {
     title: "Sincronismo de Captura",
     steps: [
-      { target: "input", text: "Escreva qualquer pensamento aqui. Não se preocupe com a organização ainda.", concept: "Externalização RAM: Tirar a ideia da cabeça libera recursos do córtex pré-frontal para o processamento, não apenas para o armazenamento." },
+      { target: "input", text: "Escreva qualquer pensamento aqui. Não se preocupe com a organization ainda.", concept: "Externalização RAM: Tirar a ideia da cabeça libera recursos do córtex pré-frontal para o processamento, não apenas para o armazenamento." },
       { target: "ia-refinement", text: "Nossa IA processará sua intenção e definirá automaticamente a prioridade e os passos iniciais.", concept: "Andaimação Neural: Reduzimos a 'fricção de início' ao decompor objetivos vagos em ações concretas." }
     ]
   },
@@ -95,6 +95,7 @@ const App: React.FC = () => {
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error' | 'none'>('none');
   const [lastRemoteUpdate, setLastRemoteUpdate] = useState(0);
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('neuro-dark-mode') !== 'false');
+  const [isSoundEnabled, setIsSoundEnabled] = useState(() => localStorage.getItem('neuro-sound-enabled') !== 'false');
   const [activeTab, setActiveTab] = useState<'execute' | 'plan' | 'habits' | 'capture' | 'fixed' | 'upgrades' | 'dashboard'>('capture');
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   const [points, setPoints] = useState(0);
@@ -113,7 +114,9 @@ const App: React.FC = () => {
   const [currentPeriod, setCurrentPeriod] = useState<DayPeriod>('Day');
   const [rescueProtocol, setRescueProtocol] = useState<PanicSolution | null>(null);
   const [showHabitForm, setShowHabitForm] = useState(false);
+  const [editingHabitId, setEditingHabitId] = useState<string | null>(null);
   const [showRecurringForm, setShowRecurringForm] = useState(false);
+  const [editingRecurringTaskId, setEditingRecurringTaskId] = useState<string | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
 
   const editingTask = useMemo(() => tasks.find(t => t.id === editingTaskId) || null, [tasks, editingTaskId]);
@@ -122,8 +125,29 @@ const App: React.FC = () => {
   const energyRank = { 'Baixa': 1, 'Média': 2, 'Alta': 3 };
 
   const playAudio = useCallback((url: string) => {
+    if (!isSoundEnabled) return;
     new Audio(url).play().catch(() => {});
-  }, []);
+  }, [isSoundEnabled]);
+
+  const toggleSound = () => {
+    const newState = !isSoundEnabled;
+    setIsSoundEnabled(newState);
+    localStorage.setItem('neuro-sound-enabled', String(newState));
+  };
+
+  const toggleDarkMode = () => {
+    const newState = !isDarkMode;
+    setIsDarkMode(newState);
+    localStorage.setItem('neuro-dark-mode', String(newState));
+  };
+
+  useEffect(() => {
+    if (!isDarkMode) {
+      document.body.classList.add('light-mode');
+    } else {
+      document.body.classList.remove('light-mode');
+    }
+  }, [isDarkMode]);
 
   const triggerPush = useCallback(async () => {
     if (!userEmail) return;
@@ -325,6 +349,24 @@ const App: React.FC = () => {
     setTimebox(prev => prev.filter(entry => entry.id !== id));
   };
 
+  const handleEditHabit = (id: string) => {
+    setEditingHabitId(id);
+    setShowHabitForm(true);
+  };
+
+  const handleDeleteHabit = (id: string) => {
+    setHabits(prev => prev.filter(h => h.id !== id));
+  };
+
+  const handleEditRecurring = (id: string) => {
+    setEditingRecurringTaskId(id);
+    setShowRecurringForm(true);
+  };
+
+  const handleDeleteRecurring = (id: string) => {
+    setRecurringTasks(prev => prev.filter(rt => rt.id !== id));
+  };
+
   return (
     <div className={`min-h-screen flex flex-col md:flex-row bg-[#020617] text-white transition-all duration-700 ${visualTheme} ${!isDarkMode ? 'light-mode' : ''}`}>
       
@@ -334,7 +376,15 @@ const App: React.FC = () => {
         <div className="p-4 bg-slate-900/50 border border-slate-800 rounded-3xl space-y-3 relative group">
            <div className="flex justify-between items-center">
               <p className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Neuro-Identity</p>
-              <div className={`w-2 h-2 rounded-full ${syncStatus === 'synced' ? 'bg-green-500 shadow-glow-green' : syncStatus === 'syncing' ? 'bg-orange-500 animate-pulse' : syncStatus === 'error' ? 'bg-red-500' : 'bg-slate-700'}`}></div>
+              <div className="flex gap-2 items-center">
+                <button onClick={toggleDarkMode} title={isDarkMode ? "Modo Claro" : "Modo Escuro"} className="p-1 rounded-md hover:bg-slate-800 transition-colors text-slate-400 hover:text-orange-500">
+                   {isDarkMode ? <Sun size={12}/> : <Moon size={12}/>}
+                </button>
+                <button onClick={toggleSound} title={isSoundEnabled ? "Desativar Som" : "Ativar Som"} className="p-1 rounded-md hover:bg-slate-800 transition-colors text-slate-400 hover:text-orange-500">
+                   {isSoundEnabled ? <Volume2 size={12}/> : <VolumeX size={12}/>}
+                </button>
+                <div className={`w-2 h-2 rounded-full ${syncStatus === 'synced' ? 'bg-green-500 shadow-glow-green' : syncStatus === 'syncing' ? 'bg-orange-500 animate-pulse' : syncStatus === 'error' ? 'bg-red-500' : 'bg-slate-700'}`}></div>
+              </div>
            </div>
            {userEmail ? (
              <div className="flex flex-col gap-1">
@@ -527,8 +577,8 @@ const App: React.FC = () => {
             </div>
           )}
 
-          {activeTab === 'habits' && <HabitsView habits={habits} setHabits={setHabits} setPoints={setPoints} playAudio={playAudio} setShowHabitForm={setShowHabitForm}/>}
-          {activeTab === 'fixed' && <FixedView recurringTasks={recurringTasks} setRecurringTasks={setRecurringTasks} currentPeriod={currentPeriod} setPoints={setPoints} setShowRecurringForm={setShowRecurringForm}/>}
+          {activeTab === 'habits' && <HabitsView habits={habits} setHabits={setHabits} setPoints={setPoints} playAudio={playAudio} setShowHabitForm={setShowHabitForm} onEdit={handleEditHabit} onDelete={handleDeleteHabit} />}
+          {activeTab === 'fixed' && <FixedView recurringTasks={recurringTasks} setRecurringTasks={setRecurringTasks} currentPeriod={currentPeriod} setPoints={setPoints} setShowRecurringForm={setShowRecurringForm} onEdit={handleEditRecurring} onDelete={handleDeleteRecurring} />}
           {activeTab === 'dashboard' && <DashboardView tasks={tasks} habits={habits} points={points} achievements={achievements}/>}
           {activeTab === 'upgrades' && <UpgradesView upgrades={upgrades} points={points} setPoints={setPoints} setUpgrades={setUpgrades} playAudio={playAudio}/>}
         </div>
@@ -628,13 +678,13 @@ const App: React.FC = () => {
         <MobIcon icon={<Binary/>} active={activeTab === 'upgrades'} onClick={() => setActiveTab('upgrades')}/>
       </nav>
 
-      {showHabitForm && <HabitForm habits={habits} setHabits={setHabits} setShowForm={setShowHabitForm}/>}
-      {showRecurringForm && <RecurringForm recurringTasks={recurringTasks} setRecurringTasks={setRecurringTasks} setShowForm={setShowRecurringForm}/>}
+      {showHabitForm && <HabitForm habits={habits} setHabits={setHabits} setShowForm={setShowHabitForm} editingHabitId={editingHabitId} setEditingHabitId={setEditingHabitId} />}
+      {showRecurringForm && <RecurringForm recurringTasks={recurringTasks} setRecurringTasks={setRecurringTasks} setShowForm={setShowRecurringForm} editingTaskId={editingRecurringTaskId} setEditingTaskId={setEditingRecurringTaskId} />}
     </div>
   );
 };
 
-const HabitsView = ({ habits, setHabits, setPoints, playAudio, setShowHabitForm }: any) => (
+const HabitsView = ({ habits, setHabits, setPoints, playAudio, setShowHabitForm, onEdit, onDelete }: any) => (
   <div className="space-y-10 animate-in fade-in">
     <div className="flex justify-between items-end px-4">
       <div><h2 className="text-4xl font-black uppercase italic text-orange-600">Mielinização</h2><p className="text-[10px] font-black text-slate-500 uppercase">Repetição para automação neural.</p></div>
@@ -645,15 +695,21 @@ const HabitsView = ({ habits, setHabits, setPoints, playAudio, setShowHabitForm 
         const today = new Date().toISOString().split('T')[0];
         const doneToday = h.lastCompleted === today;
         return (
-          <div key={h.id} className="p-8 bg-slate-900 border border-slate-800 rounded-[48px] space-y-6">
+          <div key={h.id} className="p-8 bg-slate-900 border border-slate-800 rounded-[48px] space-y-6 relative group/card">
             <div className="flex justify-between">
-              <h4 className="text-xl font-black uppercase">{h.identity}</h4>
+              <h4 className="text-xl font-black uppercase pr-12">{h.identity}</h4>
               <div className="flex gap-1">
                 {Array.from({length: 3}).map((_, i) => (
                    <div key={i} className={`w-2 h-2 rounded-full ${h.streak > i ? 'bg-orange-500 shadow-glow-orange' : 'bg-slate-800'}`}/>
                 ))}
               </div>
             </div>
+            
+            <div className="absolute top-8 right-8 flex gap-2 opacity-0 group-hover/card:opacity-100 transition-opacity">
+              <button onClick={() => onEdit(h.id)} className="p-2 text-slate-500 hover:text-orange-500 hover:bg-orange-500/10 rounded-lg transition-all"><Edit3 size={16}/></button>
+              <button onClick={() => onDelete(h.id)} className="p-2 text-slate-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all"><Trash2 size={16}/></button>
+            </div>
+
             <p className="text-xs italic text-slate-400">"{h.text}"</p>
             <button onClick={() => { if (h.lastCompleted === today) return; setHabits(habits.map((item: any) => item.id === h.id ? {...item, streak: item.streak + 1, lastCompleted: today} : item)); setPoints((p: number) => p + 50); playAudio(SOUNDS.HABIT_COMPLETE); }} disabled={doneToday} className={`w-full py-4 rounded-2xl font-black uppercase text-xs transition-all ${doneToday ? 'bg-green-600/10 text-green-500 border border-green-500/20' : 'bg-orange-600 shadow-glow-orange hover:scale-105 active:scale-95'}`}> {doneToday ? 'Neuralizado Hoje' : 'Reforçar Identidade'} </button>
           </div>
@@ -663,7 +719,7 @@ const HabitsView = ({ habits, setHabits, setPoints, playAudio, setShowHabitForm 
   </div>
 );
 
-const FixedView = ({ recurringTasks, setRecurringTasks, currentPeriod, setPoints, setShowRecurringForm }: any) => {
+const FixedView = ({ recurringTasks, setRecurringTasks, currentPeriod, setPoints, setShowRecurringForm, onEdit, onDelete }: any) => {
   const currentDay = new Date().getDay(); // 0-6
 
   const isTaskForToday = (rt: RecurringTask) => {
@@ -701,11 +757,7 @@ const FixedView = ({ recurringTasks, setRecurringTasks, currentPeriod, setPoints
                    return (
                     <div 
                       key={rt.id} 
-                      onClick={() => { 
-                        setRecurringTasks(recurringTasks.map((item: any) => item.id === rt.id ? {...item, completedDates: done ? item.completedDates.filter((d: string) => d !== todayStr) : [...item.completedDates, todayStr]} : item)); 
-                        if(!done) setPoints((pts: number) => pts + 25); 
-                      }} 
-                      className={`p-4 rounded-xl flex justify-between items-center cursor-pointer transition-all border ${done ? 'bg-slate-800/50 border-green-500/20 opacity-60' : 'bg-slate-800 border-slate-700 hover:border-purple-500'} ${isToday && !done ? 'border-purple-500/50 shadow-glow-blue/10 scale-[1.02]' : ''}`}
+                      className={`p-4 rounded-xl flex justify-between items-center group transition-all border ${done ? 'bg-slate-800/50 border-green-500/20 opacity-60' : 'bg-slate-800 border-slate-700 hover:border-purple-500'} ${isToday && !done ? 'border-purple-500/50 shadow-glow-blue/10 scale-[1.02]' : ''}`}
                     >
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-2">
@@ -723,7 +775,19 @@ const FixedView = ({ recurringTasks, setRecurringTasks, currentPeriod, setPoints
                            )}
                         </div>
                       </div>
-                      <div className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all ${done ? 'bg-green-600 shadow-glow-green scale-110' : 'bg-slate-900 border border-slate-700'}`}>{done && <Check size={12}/>}</div>
+                      
+                      <div className="flex items-center gap-2">
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => onEdit(rt.id)} className="p-2 text-slate-500 hover:text-purple-400 hover:bg-purple-400/10 rounded-lg"><Edit3 size={14}/></button>
+                          <button onClick={() => onDelete(rt.id)} className="p-2 text-slate-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg"><Trash2 size={14}/></button>
+                        </div>
+                        <div 
+                          onClick={() => { 
+                            setRecurringTasks(recurringTasks.map((item: any) => item.id === rt.id ? {...item, completedDates: done ? item.completedDates.filter((d: string) => d !== todayStr) : [...item.completedDates, todayStr]} : item)); 
+                            if(!done) setPoints((pts: number) => pts + 25); 
+                          }} 
+                          className={`w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer transition-all ${done ? 'bg-green-600 shadow-glow-green scale-110' : 'bg-slate-900 border border-slate-700 hover:border-purple-500'}`}>{done && <Check size={14}/>}</div>
+                      </div>
                     </div>
                    );
                 })}
@@ -768,23 +832,61 @@ const StatCard = ({ icon, val, label }: any) => (
   </div>
 );
 
-const HabitForm = ({ habits, setHabits, setShowForm }: any) => (
-  <div className="fixed inset-0 z-[9000] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-xl">
-    <form className="w-full max-w-lg bg-[#0a1128] border border-slate-800 rounded-[40px] p-10 space-y-6" onSubmit={e => { e.preventDefault(); const target = e.target as any; const h: Habit = { id: crypto.randomUUID(), text: target.text.value, anchor: target.anchor.value, tinyAction: target.tinyAction.value, identity: target.identity.value, streak: 0, lastCompleted: null, completedDates: [] }; setHabits([h, ...habits]); setShowForm(false); }}>
-      <h2 className="text-2xl font-black uppercase text-orange-600 italic">Novo Hábito</h2>
-      <input name="identity" required className="w-full p-4 rounded-xl bg-slate-900 border border-slate-800 text-white" placeholder="Identidade (Ex: Atleta)"/>
-      <input name="text" required className="w-full p-4 rounded-xl bg-slate-900 border border-slate-800 text-white" placeholder="Ação"/>
-      <input name="anchor" required className="w-full p-4 rounded-xl bg-slate-900 border border-slate-800 text-white" placeholder="Âncora"/>
-      <input name="tinyAction" required className="w-full p-4 rounded-xl bg-slate-900 border border-slate-800 text-white" placeholder="Micro-ação"/>
-      <button type="submit" className="w-full py-5 bg-orange-600 rounded-2xl font-black">Salvar</button>
-      <button type="button" onClick={() => setShowForm(false)} className="w-full text-xs uppercase font-black text-slate-500">Cancelar</button>
-    </form>
-  </div>
-);
+const HabitForm = ({ habits, setHabits, setShowForm, editingHabitId, setEditingHabitId }: any) => {
+  const editingHabit = useMemo(() => habits.find((h: any) => h.id === editingHabitId), [habits, editingHabitId]);
 
-const RecurringForm = ({ recurringTasks, setRecurringTasks, setShowForm }: any) => {
-  const [freq, setFreq] = useState<Frequency>(Frequency.DAILY);
-  const [selectedDays, setSelectedDays] = useState<number[]>([]);
+  return (
+    <div className="fixed inset-0 z-[9000] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-xl">
+      <form className="w-full max-w-lg bg-[#0a1128] border border-slate-800 rounded-[40px] p-10 space-y-6" onSubmit={e => { 
+        e.preventDefault(); 
+        const target = e.target as any; 
+        if (editingHabitId) {
+          setHabits(habits.map((h: any) => h.id === editingHabitId ? {
+            ...h,
+            text: target.text.value,
+            anchor: target.anchor.value,
+            tinyAction: target.tinyAction.value,
+            identity: target.identity.value
+          } : h));
+        } else {
+          const h: Habit = { id: crypto.randomUUID(), text: target.text.value, anchor: target.anchor.value, tinyAction: target.tinyAction.value, identity: target.identity.value, streak: 0, lastCompleted: null, completedDates: [] }; 
+          setHabits([h, ...habits]); 
+        }
+        setShowForm(false);
+        setEditingHabitId(null);
+      }}>
+        <h2 className="text-2xl font-black uppercase text-orange-600 italic">{editingHabitId ? 'Ajustar Mielinização' : 'Novo Hábito'}</h2>
+        <div className="space-y-2">
+          <label className="text-[10px] font-black uppercase text-slate-500">Identidade</label>
+          <input name="identity" required defaultValue={editingHabit?.identity || ""} className="w-full p-4 rounded-xl bg-slate-900 border border-slate-800 text-white outline-none focus:border-orange-500" placeholder="Ex: Sou o tipo de pessoa que..."/>
+        </div>
+        <div className="space-y-2">
+          <label className="text-[10px] font-black uppercase text-slate-500">O Hábito</label>
+          <input name="text" required defaultValue={editingHabit?.text || ""} className="w-full p-4 rounded-xl bg-slate-900 border border-slate-800 text-white outline-none focus:border-orange-500" placeholder="Ação"/>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase text-slate-500">Âncora</label>
+            <input name="anchor" required defaultValue={editingHabit?.anchor || ""} className="w-full p-4 rounded-xl bg-slate-900 border border-slate-800 text-white outline-none focus:border-orange-500" placeholder="Depois de..."/>
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase text-slate-500">Micro-ação</label>
+            <input name="tinyAction" required defaultValue={editingHabit?.tinyAction || ""} className="w-full p-4 rounded-xl bg-slate-900 border border-slate-800 text-white outline-none focus:border-orange-500" placeholder="Vou... (fácil)"/>
+          </div>
+        </div>
+        <button type="submit" className="w-full py-5 bg-orange-600 rounded-2xl font-black uppercase shadow-glow-orange hover:scale-105 active:scale-95 transition-all">
+          {editingHabitId ? 'Atualizar Identidade' : 'Iniciar Repetição'}
+        </button>
+        <button type="button" onClick={() => { setShowForm(false); setEditingHabitId(null); }} className="w-full text-xs uppercase font-black text-slate-500 hover:text-white transition-colors">Cancelar</button>
+      </form>
+    </div>
+  );
+};
+
+const RecurringForm = ({ recurringTasks, setRecurringTasks, setShowForm, editingTaskId, setEditingTaskId }: any) => {
+  const editingTask = useMemo(() => recurringTasks.find((rt: any) => rt.id === editingTaskId), [recurringTasks, editingTaskId]);
+  const [freq, setFreq] = useState<Frequency>(editingTask?.frequency || Frequency.DAILY);
+  const [selectedDays, setSelectedDays] = useState<number[]>(editingTask?.weekDays || []);
 
   const toggleDay = (idx: number) => {
     setSelectedDays(prev => prev.includes(idx) ? prev.filter(d => d !== idx) : [...prev, idx]);
@@ -795,24 +897,36 @@ const RecurringForm = ({ recurringTasks, setRecurringTasks, setShowForm }: any) 
       <form className="w-full max-w-lg bg-[#0a1128] border border-slate-800 rounded-[40px] p-10 space-y-6" onSubmit={e => { 
         e.preventDefault(); 
         const target = e.target as any; 
-        const rt: RecurringTask = { 
-          id: crypto.randomUUID(), 
-          text: target.text.value, 
-          frequency: freq, 
-          priority: Priority.Q2, 
-          energy: target.energy.value as any, 
-          period: target.period.value, 
-          completedDates: [],
-          weekDays: freq === Frequency.WEEKLY ? selectedDays : undefined
-        }; 
-        setRecurringTasks([rt, ...recurringTasks]); 
+        if (editingTaskId) {
+          setRecurringTasks(recurringTasks.map((rt: any) => rt.id === editingTaskId ? {
+            ...rt,
+            text: target.text.value, 
+            frequency: freq, 
+            energy: target.energy.value as any, 
+            period: target.period.value, 
+            weekDays: freq === Frequency.WEEKLY ? selectedDays : undefined
+          } : rt));
+        } else {
+          const rt: RecurringTask = { 
+            id: crypto.randomUUID(), 
+            text: target.text.value, 
+            frequency: freq, 
+            priority: Priority.Q2, 
+            energy: target.energy.value as any, 
+            period: target.period.value, 
+            completedDates: [],
+            weekDays: freq === Frequency.WEEKLY ? selectedDays : undefined
+          }; 
+          setRecurringTasks([rt, ...recurringTasks]); 
+        }
         setShowForm(false); 
+        setEditingTaskId(null);
       }}>
-        <h2 className="text-2xl font-black uppercase text-purple-400 italic">Nova Rotina</h2>
+        <h2 className="text-2xl font-black uppercase text-purple-400 italic">{editingTaskId ? 'Ajustar Ciclo' : 'Nova Rotina'}</h2>
         
         <div className="space-y-2">
           <label className="text-[10px] font-black uppercase text-slate-500">O que se repete?</label>
-          <input name="text" required className="w-full p-4 rounded-xl bg-slate-900 border border-slate-800 text-white focus:border-purple-500 outline-none" placeholder="Ex: Meditação matinal"/>
+          <input name="text" required defaultValue={editingTask?.text || ""} className="w-full p-4 rounded-xl bg-slate-900 border border-slate-800 text-white focus:border-purple-500 outline-none" placeholder="Ex: Meditação matinal"/>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
@@ -824,7 +938,7 @@ const RecurringForm = ({ recurringTasks, setRecurringTasks, setShowForm }: any) 
           </div>
           <div className="space-y-2">
             <label className="text-[10px] font-black uppercase text-slate-500">Bio-Período</label>
-            <select name="period" className="w-full p-4 rounded-xl bg-slate-900 border border-slate-800 font-bold text-white outline-none">
+            <select name="period" defaultValue={editingTask?.period || "Day"} className="w-full p-4 rounded-xl bg-slate-900 border border-slate-800 font-bold text-white outline-none">
               {Object.entries(PERIOD_LABELS).map(([val, label]) => ( <option key={val} value={val} className="bg-slate-900">{label}</option> ))}
             </select>
           </div>
@@ -850,15 +964,17 @@ const RecurringForm = ({ recurringTasks, setRecurringTasks, setShowForm }: any) 
 
         <div className="space-y-2">
            <label className="text-[10px] font-black uppercase text-slate-500">Energia Necessária</label>
-           <select name="energy" className="w-full p-4 rounded-xl bg-slate-900 border border-slate-800 font-bold text-white outline-none">
+           <select name="energy" defaultValue={editingTask?.energy || "Média"} className="w-full p-4 rounded-xl bg-slate-900 border border-slate-800 font-bold text-white outline-none">
               <option value="Baixa">Baixa</option>
               <option value="Média">Média</option>
               <option value="Alta">Alta</option>
            </select>
         </div>
 
-        <button type="submit" className="w-full py-5 bg-purple-600 rounded-2xl font-black shadow-glow-blue hover:scale-105 active:scale-95 transition-all uppercase">Sintetizar Ciclo</button>
-        <button type="button" onClick={() => setShowForm(false)} className="w-full text-xs uppercase font-black text-slate-500 hover:text-white transition-colors">Cancelar</button>
+        <button type="submit" className="w-full py-5 bg-purple-600 rounded-2xl font-black shadow-glow-blue hover:scale-105 active:scale-95 transition-all uppercase">
+          {editingTaskId ? 'Salvar Alterações' : 'Sintetizar Ciclo'}
+        </button>
+        <button type="button" onClick={() => { setShowForm(false); setEditingTaskId(null); }} className="w-full text-xs uppercase font-black text-slate-500 hover:text-white transition-colors">Cancelar</button>
       </form>
     </div>
   );
