@@ -1,9 +1,9 @@
 
 export enum Priority {
-  Q1 = 'Q1', // Faça agora
-  Q2 = 'Q2', // Estratégico/Importante
-  Q3 = 'Q3', // Interrupções
-  Q4 = 'Q4'  // Eliminar
+  Q1 = 'Q1', // Importante e Urgente (Foco)
+  Q2 = 'Q2', // Importante, não Urgente (Estratégico)
+  Q3 = 'Q3', // Urgente, não Importante (Delegar)
+  Q4 = 'Q4'  // Nem um nem outro (Eliminar)
 }
 
 export enum Frequency {
@@ -14,6 +14,7 @@ export enum Frequency {
 }
 
 export type BrainCapacity = 'Exausto' | 'Neutro' | 'Hiperfocado';
+export type DayPeriod = 'Morning' | 'Day' | 'Evening' | 'Night';
 
 export interface User {
   id: string;
@@ -21,17 +22,26 @@ export interface User {
   email: string;
 }
 
+export interface TimeboxEntry {
+  id: string;
+  start: string;
+  end: string;
+  activity: string;
+  completed: boolean;
+}
+
 export interface Task {
   id: string;
   text: string;
   priority: Priority;
   energy: 'Baixa' | 'Média' | 'Alta';
-  capacityNeeded: BrainCapacity; // Novo: Baseado no PDF
+  capacityNeeded: BrainCapacity; 
   completed: boolean;
   subtasks: string[];
-  notes?: string; // Novo: Suporte a anotações
+  notes?: string; 
   date: string;
   createdAt: number;
+  isRefining?: boolean; // Indica que a IA ainda está processando os detalhes
 }
 
 export interface RecurringTask {
@@ -41,6 +51,7 @@ export interface RecurringTask {
   priority: Priority;
   energy: 'Baixa' | 'Média' | 'Alta';
   completedDates: string[]; 
+  period?: DayPeriod; 
 }
 
 export interface Habit {
@@ -48,9 +59,10 @@ export interface Habit {
   text: string;
   anchor: string;
   tinyAction: string;
+  identity?: string; 
   streak: number;
   lastCompleted: string | null;
-  completedDates: string[]; // Adicionado para histórico semanal
+  completedDates: string[]; 
 }
 
 export interface DopamenuItem {
@@ -58,11 +70,27 @@ export interface DopamenuItem {
   category: 'Starter' | 'Main' | 'Side' | 'Dessert';
   label: string;
   description: string;
+  effort: 'Baixo' | 'Médio' | 'Alto';
+  duration?: string;
+  iconName?: string;
 }
 
-export interface IdentityBoost {
-  text: string;
-  taskTitle: string;
+export interface Upgrade {
+  id: string;
+  name: string;
+  description: string;
+  cost: number;
+  unlocked: boolean;
+  category: 'Focus' | 'AI' | 'Visual' | 'Energy';
+  icon: string;
+}
+
+export interface Achievement {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  unlockedAt: number | null;
 }
 
 export interface PanicSolution {

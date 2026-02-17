@@ -5,920 +5,775 @@ import {
   Plus, X, Trophy, Play, Pause, RotateCcw, 
   BrainCircuit, Anchor, Target, Flame, Sparkles, 
   Repeat, Award, TrendingUp, Sun, Moon, CheckCircle2,
-  CalendarDays, Trash2, Star, CheckCircle, Info, Move, MousePointer2,
+  Trash2, Star, CheckCircle, Info, Move,
   ChevronRight, Brain, Lightbulb, ZapOff, BarChart3,
   Coffee, Utensils, Waves, Users, Wind, Battery, BatteryLow, BatteryMedium, BatteryFull,
   Check, ArrowLeft, ArrowRight, GripVertical, Wand2, Calendar, HelpCircle, Volume2, VolumeX, Loader2,
   Clock, CalendarRange, Binary, ShieldCheck, Palette, BookOpen, UtensilsCrossed, GraduationCap, Microscope,
   Cloud, CloudOff, CloudSync, Mail, Rocket, BrainCog, StickyNote, ListChecks, Music, Activity, Star as StarIcon, Cpu,
-  ChefHat, IceCream, Pizza, Cookie, ShieldAlert, ZapOff as ZapIcon, FastForward, Filter
+  ChefHat, IceCream, Pizza, Cookie, ShieldAlert, ZapOff as ZapIcon, FastForward, Filter, Settings, Fingerprint,
+  Sunrise, Sunset, MoonStar, Briefcase, Heart, Edit3, Sparkle, Swords, Gem, Lock, Unlock, Zap as ZapBolt,
+  Zap as SparkleIcon, History, Fingerprint as IdentityIcon, Send, Brain as BrainIcon, LifeBuoy, FileText, Layers,
+  Loader, RefreshCcw, Info as InfoIcon
 } from 'lucide-react';
-import { Priority, Task, Habit, IdentityBoost, PanicSolution, RecurringTask, Frequency, User, BrainCapacity, DopamenuItem } from './types';
+import { Priority, Task, Habit, RecurringTask, Frequency, BrainCapacity, DopamenuItem, DayPeriod, Upgrade, Achievement, PanicSolution, TimeboxEntry } from './types';
 import { geminiService } from './services/geminiService';
 import { syncService } from './services/syncService';
+import { GoogleGenAI, Type } from "@google/genai";
 
 const SOUNDS = {
   TASK_COMPLETE: 'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3',
   HABIT_COMPLETE: 'https://assets.mixkit.co/active_storage/sfx/2013/2013-preview.mp3',
-  TIMER_START: 'https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3',
-  TIMER_END: 'https://assets.mixkit.co/active_storage/sfx/2018/2018-preview.mp3',
-  XP_GAIN: 'https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3',
-  LEVEL_UP: 'https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3'
+  UPGRADE: 'https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3',
+  BLOCK_SYNC: 'https://assets.mixkit.co/active_storage/sfx/2017/2017-preview.mp3',
+  CAPTURE: 'https://assets.mixkit.co/active_storage/sfx/2015/2015-preview.mp3',
 };
 
-const SOUNDSCAPES = [
-  { id: 'none', label: 'Silêncio', url: '' },
-  { id: 'lofi', label: 'Lo-fi Neural', url: 'https://stream.zeno.fm/f3wvbb606ertv', level: 6 },
-  { id: 'rain', label: 'Chuva Córtex', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3', level: 6 }, 
-  { id: 'white', label: 'Ruído Branco', url: '', level: 6 }
-];
-
-const LEVELS = [
-  { level: 1, minPoints: 0, title: "Neurônio Inicial", unlock: "Início da Jornada" },
-  { level: 2, minPoints: 1000, title: "Faísca Sináptica", unlock: "Tema: Oceano Profundo", themeId: 'theme-ocean' },
-  { level: 3, minPoints: 3000, title: "Rede Conectada", unlock: "Tema: Floresta Córtex", themeId: 'theme-forest' },
-  { level: 4, minPoints: 6000, title: "Mestre Executivo", unlock: "Tema: Pulso Cibernético", themeId: 'theme-cyber' },
-  { level: 5, minPoints: 10000, title: "Arquiteto Cerebral", unlock: "Tema: Ouro Cerebral", themeId: 'theme-gold' },
-  { level: 6, minPoints: 15000, title: "Maestro Neural", unlock: "Recurso: Soundscapes (Sons Ambientes)", feature: 'soundscapes' },
-  { level: 7, minPoints: 22000, title: "Consciência Quântica", unlock: "Tema: Vácuo Quântico", themeId: 'theme-quantum' },
-  { level: 8, minPoints: 32000, title: "Sábio Sináptico", unlock: "Tema: Mente Cósmica", themeId: 'theme-cosmic' },
-  { level: 9, minPoints: 45000, title: "Entidade de Fluxo", unlock: "IA: Sugestões de Resgate Avançadas", feature: 'advanced-ai' },
-  { level: 10, minPoints: 60000, title: "Transcendente", unlock: "Tema: Transcendência Final", themeId: 'theme-transcendent' },
-];
-
-const INITIAL_DOPAMENU: DopamenuItem[] = [
-  { id: '1', category: 'Starter', label: 'Caminhada de 5 min', description: 'Ativação motora rápida para sair da inércia.' },
-  { id: '2', category: 'Starter', label: 'Beber água gelada', description: 'Choque sensorial leve para o sistema nervoso.' },
-  { id: '3', category: 'Main', label: 'Ler 15 min', description: 'Dopamina de baixo esforço e alto valor.' },
-  { id: '4', category: 'Main', label: 'Meditação breve', description: 'Reset sináptico.' },
-  { id: '5', category: 'Side', label: 'Playlist de Foco', description: 'Estímulo auditivo paralelo.' },
-  { id: '6', category: 'Dessert', label: 'Assistir 1 Episódio', description: 'Recompensa final após grandes blocos.' },
-];
-
-interface DailyMission {
-  id: number;
-  text: string;
-  minutes: number;
-  completed: boolean;
-}
-
-const TUTORIAL_STEPS = [
-  {
-    title: "Seu Segundo Cérebro",
-    theory: "O Córtex Pré-Frontal (CPF) é o CEO do seu cérebro, mas ele tem pouca memória ram. O estresse surge quando tentamos guardar tudo na cabeça.",
-    description: "Este app não é apenas uma lista de tarefas, é uma prótese cognitiva. Vamos aprender a usá-lo passo a passo para liberar sua potência neural.",
-    icon: <BrainCircuit className="w-16 h-16 text-orange-500" />,
-    tab: null
-  },
-  {
-    title: "1. Captura (Brain Dump)",
-    theory: "O Efeito Zeigarnik diz que tarefas inacabadas 'rodam' em segundo plano, consumindo sua energia vital e gerando ansiedade.",
-    description: "Use a aba 'CAPTURA' sempre que tiver uma ideia ou preocupação. Escreva tudo lá sem julgar. Isso remove o peso do seu cérebro imediatamente.",
-    icon: <ListTodo className="w-16 h-16 text-blue-500" />,
-    tab: 'capture'
-  },
-  {
-    title: "2. Matriz de Eisenhower",
-    theory: "Urgent nem sempre é importante. O cérebro tende a focar no que é barulhento, não no que é valioso.",
-    description: "Na aba 'MATRIZ', arraste suas capturas. Foque no Q2 (Estratégico) para crescer, e resolva o Q1 (Crítico) para não colapsar.",
-    icon: <LayoutGrid className="w-16 h-16 text-red-500" />,
-    tab: 'plan'
-  },
-  {
-    title: "3. Custo Energético",
-    theory: "Tarefas exigem diferentes tipos de combustível neural. Tentar resolver algo 'Alta Energia' quando você está exausto gera frustração e procrastinação.",
-    description: "Clique nos ícones de energia nas tarefas para definir o custo. O app ocultará o que for pesado demais para o seu estado atual (Arousal).",
-    icon: <Zap className="w-16 h-16 text-yellow-500" />,
-    tab: 'plan'
-  },
-  {
-    title: "4. Regra das 3 Missões",
-    theory: "O cérebro processa informações em blocos (chunking). Listas gigantes causam paralisia por análise.",
-    description: "Na aba 'FOCAR', escolha apenas 3 missões para o dia. Se você fizer apenas essas 3, o seu dia já terá sido um sucesso neural.",
-    icon: <Target className="w-16 h-16 text-orange-600" />,
-    tab: 'execute'
-  },
-  {
-    title: "5. Ciclos Ultradianos",
-    theory: "O foco humano funciona em ondas de aproximadamente 90 minutos. Forçar além disso gera erro sináptico.",
-    description: "Ao iniciar uma missão, ative o TIMER. Quando ele acabar, você DEVE parar. Respeite o limite químico do seu cérebro.",
-    icon: <Timer className="w-16 h-16 text-green-500" />,
-    tab: 'execute'
-  },
-  {
-    title: "6. Automação (Hábitos)",
-    theory: "Hábitos moram nos Gânglios Basais e não gastam energia do CPF. O segredo é o empilhamento: 'Depois de [Âncora], eu vou [Ação]'.",
-    description: "Na aba 'HÁBITOS', use ações tão pequenas que o cérebro não consiga dizer não. Ex: 'Depois de escovar os dentes, vou ler 1 página'.",
-    icon: <RefreshCw className="w-16 h-16 text-purple-500" />,
-    tab: 'habits'
-  },
-  {
-    title: "7. O Dopamenu",
-    theory: "Se você não planeja seu descanso, seu cérebro vai roubá-lo de você através da distração (redes sociais, etc).",
-    description: "Use o 'DOPAMENU' para escolher recompensas saudáveis após completar blocos de foco. Recarregue sua dopamina de forma estratégica.",
-    icon: <UtensilsCrossed className="w-16 h-16 text-pink-500" />,
-    tab: 'dopamenu'
-  }
-];
-
-const CAPTURA_GUIDE_STEPS = [
-  {
-    title: "Captura Neural",
-    theory: "Seu cérebro foi feito para ter ideias, não para guardá-las. Tentar lembrar de tudo consome 30% da energia do seu Córtex Pré-Frontal.",
-    description: "A Captura é o seu 'External RAM'. Escreva aqui qualquer pensamento, meta ou preocupação, não importa o tamanho.",
-    icon: <ListTodo size={48} className="text-blue-500" />
-  },
-  {
-    title: "Efeito Zeigarnik",
-    theory: "Tarefas em aberto geram 'loops cognitivos' que causam ansiedade constante até serem registradas em um sistema confiável.",
-    description: "Ao escrever aqui, você fecha o loop. O cérebro relaxa porque sabe que a informação não será perdida.",
-    icon: <Activity size={48} className="text-orange-500" />
-  },
-  {
-    title: "Fluxo de Destino",
-    theory: "A Captura é apenas o purgatório das ideias. Depois de descarregar, vá para a 'Matriz' para decidir o destino de cada meta.",
-    description: "Não tente organizar enquanto captura. Apenas descarregue. A organização é um processo executivo diferente que deve ser feito depois.",
-    icon: <FastForward size={48} className="text-green-500" />
-  }
-];
-
-const FOCUS_GUIDE_STEPS = [
-  {
-    title: "Protocolo de Execução",
-    theory: "Multitarefa é um mito. O cérebro gasta energia massiva no 'custo de troca' entre atividades.",
-    description: "O modo Focar é o seu cockpit. Escolha UMA meta principal da sua lista e dedique sua atenção total a ela.",
-    icon: <Target size={48} className="text-orange-600" />
-  },
-  {
-    title: "A Regra das 3 Missões",
-    theory: "Listas infinitas ativam o sistema de ameaça do cérebro, causando paralisia.",
-    description: "Defina apenas 3 missões diárias no card superior. Se completar as 3, seu dia foi um sucesso neuroquímico.",
-    icon: <StarIcon size={48} className="text-yellow-500" />
-  },
-  {
-    title: "Ciclos Ultradianos",
-    theory: "Nosso foco opera em ondas de ~90 minutos. Após esse tempo, a performance cai e a fadiga sináptica se instala.",
-    description: "Use o Timer de 90 min. Quando ele tocar, você DEVE fazer um intervalo do seu 'Dopamenu'. É a lei da biologia.",
-    icon: <Timer size={48} className="text-green-500" />
-  }
-];
-
-const ROUTINES_GUIDE_STEPS = [
-  {
-    title: "Automação Executiva",
-    theory: "Decisões triviais (o que comer, que horas treinar) esgotam seu estoque diário de força de vontade.",
-    description: "As Rotinas Fixas transformam decisões em processos automáticos. O objetivo é economizar sua energia para o que realmente importa.",
-    icon: <Repeat size={48} className="text-purple-500" />
-  },
-  {
-    title: "Frequência e Ritmo",
-    theory: "O cérebro ama previsibilidade. Ritmos circadianos estáveis melhoram o sono e a clareza mental.",
-    description: "Use esta aba para tarefas que se repetem. Elas aparecerão automaticamente na sua fila de execução todos os dias ou semanas.",
-    icon: <CalendarRange size={48} className="text-blue-400" />
-  }
-];
-
-const HABITS_GUIDE_STEPS = [
-  {
-    title: "Neuroplasticidade Dirigida",
-    theory: "Hábitos são caminhos neurais pavimentados nos Gânglios Basais. Uma vez formados, eles não exigem esforço consciente.",
-    description: "Consolidar um hábito é como instalar um software no seu cérebro. Leva tempo, mas o retorno é eterno.",
-    icon: <BrainCircuit size={48} className="text-orange-500" />
-  },
-  {
-    title: "Empilhamento de Hábitos",
-    theory: "É mais fácil construir uma nova sinapse em cima de uma já existente (uma Âncora).",
-    description: "Use a fórmula: 'Depois de [Âncora], eu vou [Pequena Ação]'. Ex: 'Depois de fechar o notebook, eu vou meditar por 1 minuto'.",
-    icon: <Anchor size={48} className="text-blue-500" />
-  }
-];
-
-const DOPAMENU_GUIDE_STEPS = [
-  {
-    title: "O que é o Dopamenu?",
-    theory: "Dopamina é o neurotransmissor da antecipação e recompensa. Se você não planeja seu lazer, o cérebro recorre ao lazer de 'baixo valor' (scrolling infinito).",
-    description: "O Dopamenu ajuda você a curar uma lista de atividades que realmente recarregam sua bateria neural.",
-    icon: <UtensilsCrossed className="w-16 h-16 text-orange-500" />
-  },
-  {
-    title: "Starters (Entradas)",
-    theory: "Atividades de 5-10 minutos com baixo custo de energia.",
-    description: "Use para sair da inércia ou entre pequenas tarefas. Ex: Beber um café, alongar, ver 3 fotos de viagens.",
-    icon: <Zap size={48} className="text-yellow-500" />
-  },
-  {
-    title: "Mains (Pratos Principais)",
-    theory: "20-40 minutos de descanso profundo.",
-    description: "O verdadeiro combustível. Coisas que você ama e que exigem sua atenção total de forma prazerosa. Ex: Jogar um game, ler um livro, tocar um instrumento.",
-    icon: <ChefHat size={48} className="text-blue-500" />
-  }
-];
-
-const MATRIX_GUIDE_STEPS = [
-  {
-    title: "Matriz Neural",
-    theory: "O cérebro tem dificuldade em distinguir o que é importante do que é apenas barulhento. A Matriz de Eisenhower automatiza esse filtro.",
-    description: "Organizar suas metas em quadrantes libera o Córtex Pré-Frontal da carga cognitiva de decidir 'o que fazer agora' a cada 5 minutos.",
-    icon: <LayoutGrid size={48} className="text-orange-500" />
-  },
-  {
-    title: "Q1: O Quadrante de Crise",
-    theory: "Importante e Urgente. Ativa a Amígdala e gera cortisol (estresse).",
-    description: "Tarefas aqui precisam ser resolvidas AGORA para evitar o colapso. Se o seu Q1 está sempre cheio, você está em modo de sobrevivência, não de evolução.",
-    icon: <ShieldAlert size={48} className="text-red-500" />
-  },
-  {
-    title: "Q2: O Quadrante de Ouro",
-    theory: "Importante, mas não Urgente. É onde a Neuroplasticidade e o Crescimento moram.",
-    description: "Aqui estão seus projetos, estudos e saúde. O objetivo do NeuroExecutor é manter você a maior parte do dia neste quadrante. É o trabalho estratégico.",
-    icon: <Target size={48} className="text-orange-600" />
-  }
-];
-
-const SynapseLogo = ({ className = "" }: { className?: string }) => (
-  <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" className={`shrink-0 ${className}`}>
-    <defs>
-      <linearGradient id="logo-grad-fire" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stopColor="var(--accent-primary, #f97316)" />
-        <stop offset="100%" stopColor="var(--accent-secondary, #ef4444)" />
-      </linearGradient>
-    </defs>
-    <circle cx="16" cy="16" r="14" fill="currentColor" fillOpacity="0.05" />
-    <circle cx="16" cy="16" r="6" stroke="url(#logo-grad-fire)" strokeWidth="2" className="synapse-core" />
-    <circle cx="16" cy="16" r="3" fill="url(#logo-grad-fire)" className="synapse-core" />
-    <path d="M16 16L26 6" stroke="url(#logo-grad-fire)" strokeWidth="2.5" strokeLinecap="round" className="opacity-80" />
-    <circle cx="26" cy="6" r="2" fill="var(--accent-secondary, #ef4444)" />
-  </svg>
-);
-
-const SparkleParticles: React.FC = () => {
-  const particles = Array.from({ length: 24 });
-  return (
-    <div className="absolute inset-0 pointer-events-none flex items-center justify-center overflow-visible z-50">
-      {particles.map((_, i) => {
-        const angle = (i / particles.length) * Math.PI * 2 + (Math.random() * 0.5);
-        const velocity = 80 + Math.random() * 100;
-        const dx = Math.cos(angle) * velocity;
-        const dy = Math.sin(angle) * velocity;
-        const size = 3 + Math.random() * 6;
-        return (
-          <div
-            key={i}
-            className="absolute rounded-full animate-particle shadow-lg"
-            style={{
-              width: `${size}px`,
-              height: `${size}px`,
-              backgroundColor: i % 2 === 0 ? '#f97316' : '#facc15',
-              '--dx': `${dx}px`,
-              '--dy': `${dy}px`,
-              animationDelay: `${Math.random() * 0.15}s`,
-              transform: `rotate(${Math.random() * 360}deg)`
-            } as any}
-          />
-        );
-      })}
-    </div>
-  );
+const PERIOD_LABELS: Record<DayPeriod, string> = {
+  Morning: 'Manhã',
+  Day: 'Tarde',
+  Evening: 'Noite',
+  Night: 'Madrugada'
 };
+
+const TUTORIAL_DATA: Record<string, { title: string, steps: { target: string, text: string, concept: string }[] }> = {
+  capture: {
+    title: "Sincronismo de Captura",
+    steps: [
+      { target: "input", text: "Escreva qualquer pensamento aqui. Não se preocupe com a organização ainda.", concept: "Externalização RAM: Tirar a ideia da cabeça libera recursos do córtex pré-frontal para o processamento, não apenas para o armazenamento." },
+      { target: "ia-refinement", text: "Nossa IA processará sua intenção e definirá automaticamente a prioridade e os passos iniciais.", concept: "Andaimação Neural: Reduzimos a 'fricção de início' ao decompor objetivos vagos em ações concretas." }
+    ]
+  },
+  execute: {
+    title: "Estado de Fluxo",
+    steps: [
+      { target: "timer", text: "Trabalhe em blocos de 90 minutos para respeitar seus Ciclos Ultradianos.", concept: "Ritmo Ultradiano: O cérebro opera em ciclos de alta performance de ~90 min seguidos de 15-20 min de fadiga." },
+      { target: "timebox", text: "Planeje seu dia em blocos de tempo para evitar o cansaço da decisão contínua.", concept: "Timeboxing: Alocar períodos específicos para tarefas reduz a carga cognitiva de 'o que fazer agora'." },
+      { target: "energy-match", text: "O sistema destaca tarefas que combinam com seu nível de energia atual.", concept: "Gestão de Bio-Energia: Executar tarefas de alta carga com baixa energia causa 'burnout' cognitivo precoce." },
+      { target: "rescue", text: "Se sentir paralisia, use o Protocolo de Resgate IA.", concept: "Inibição de Resposta: A paralisia geralmente é uma sobrecarga de amígdala. A IA atua como um lobo frontal externo." }
+    ]
+  },
+  plan: {
+    title: "Arquitetura de Decisão",
+    steps: [
+      { target: "matrix", text: "Organize visualmente o que é Importante vs Urgente.", concept: "Matriz de Eisenhower: Focar no Quadrante 2 (Importante/Não Urgente) reduz o cortisol a longo prazo." },
+      { target: "drag-drop", text: "Arraste para redefinir prioridades conforme sua clareza mental muda.", concept: "Flexibilidade Cognitiva: A capacidade de reajustar planos é uma função executiva vital." }
+    ]
+  },
+  habits: {
+    title: "Mielinização Profunda",
+    steps: [
+      { target: "identity", text: "Defina quem você quer SER, não apenas o que quer FAZER.", concept: "Hábitos de Identidade: A mudança de hábito mais forte ocorre quando ela se torna parte do seu autoconceito." },
+      { target: "anchor", text: "Use uma âncora: algo que você já faz para 'pendurar' o novo hábito.", concept: "Encadeamento de Hábitos: Utiliza caminhos neurais já estabelecidos para facilitar a nova automação." }
+    ]
+  },
+  fixed: {
+    title: "Bio-Ciclos",
+    steps: [
+      { target: "circadian", text: "Sincronize rotinas com os períodos do dia.", concept: "Ritmo Circadiano: Seu cérebro produz diferentes neuroquímicos (cortisol/melatonina) baseados na luz e horário." }
+    ]
+  }
+};
+
+const INITIAL_UPGRADES: Upgrade[] = [
+  { id: 'u1', name: 'Decompositor IA v2', description: 'Decompõe tarefas em 8 passos em vez de 5.', cost: 500, unlocked: false, category: 'AI', icon: 'Wand2' },
+  { id: 'u2', name: 'Timer de Dopamina', description: 'Visualização ultra-colorida no timer de foco.', cost: 1000, unlocked: false, category: 'Focus', icon: 'Zap' },
+  { id: 'u3', name: 'Tema Cyberpunk', description: 'Visual neon e alto contraste.', cost: 1500, unlocked: false, category: 'Visual', icon: 'Palette' },
+  { id: 'u4', name: 'Bio-Sync', description: 'Ajuste automático de tarefas baseado na hora do dia.', cost: 2000, unlocked: false, category: 'Energy', icon: 'Activity' },
+];
+
+const INITIAL_ACHIEVEMENTS: Achievement[] = [
+  { id: 'a1', title: 'Primeira Sinapse', description: 'Completou a primeira tarefa.', icon: 'Zap', unlockedAt: null },
+  { id: 'a2', title: 'Consistência de Ferro', description: '7 dias seguidos de hábito.', icon: 'Flame', unlockedAt: null },
+  { id: 'a3', title: 'Mestre do Foco', description: 'Terminou um timer de 90 minutos.', icon: 'Target', unlockedAt: null },
+];
 
 const App: React.FC = () => {
-  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [userEmail, setUserEmail] = useState(() => localStorage.getItem('neuro-user-email') || '');
+  const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error' | 'none'>('none');
+  const [lastRemoteUpdate, setLastRemoteUpdate] = useState(0);
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('neuro-dark-mode') !== 'false');
+  const [activeTab, setActiveTab] = useState<'execute' | 'plan' | 'habits' | 'capture' | 'fixed' | 'upgrades' | 'dashboard'>('capture');
   const [isDataLoaded, setIsDataLoaded] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [lastSynced, setLastSynced] = useState<number | null>(null);
-
-  const playAudio = useCallback((soundUrl: string) => {
-    if (!soundEnabled) return;
-    const audio = new Audio(soundUrl);
-    audio.volume = 0.4;
-    audio.play().catch(e => console.debug("Audio play blocked"));
-  }, [soundEnabled]);
-
-  // States
-  const [activeTab, setActiveTab] = useState<'execute' | 'plan' | 'habits' | 'capture' | 'fixed' | 'upgrades' | 'dopamenu' | 'dashboard'>('execute');
+  const [points, setPoints] = useState(0);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [recurringTasks, setRecurringTasks] = useState<RecurringTask[]>([]);
   const [habits, setHabits] = useState<Habit[]>([]);
-  const [points, setPoints] = useState(0);
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [selectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [timebox, setTimebox] = useState<TimeboxEntry[]>([]);
+  const [upgrades, setUpgrades] = useState<Upgrade[]>(INITIAL_UPGRADES);
+  const [achievements, setAchievements] = useState<Achievement[]>(INITIAL_ACHIEVEMENTS);
   const [visualTheme, setVisualTheme] = useState(() => localStorage.getItem('neuro-visual-theme') || 'theme-default');
-  const [dopamenuItems, setDopamenuItems] = useState<DopamenuItem[]>(INITIAL_DOPAMENU);
-  const [sparkleTaskId, setSparkleTaskId] = useState<string | null>(null);
-  const [activeSoundscape, setActiveSoundscape] = useState('none');
-  const soundscapeAudioRef = useRef<HTMLAudioElement | null>(null);
-  const [userEmail, setUserEmail] = useState(() => localStorage.getItem('neuro-user-email') || '');
-  const [showSyncModal, setShowSyncModal] = useState(false);
-  const [emailInput, setEmailInput] = useState("");
-  const [justCompletedMissionId, setJustCompletedMissionId] = useState<number | null>(null);
-  const [justCompletedTaskId, setJustCompletedTaskId] = useState<string | null>(null);
-  const [dailyMissions, setDailyMissions] = useState<DailyMission[]>([
-    { id: 1, text: '', minutes: 30, completed: false },
-    { id: 2, text: '', minutes: 30, completed: false },
-    { id: 3, text: '', minutes: 30, completed: false }
-  ]);
-  const [currentArousal, setCurrentArousal] = useState<BrainCapacity>('Neutro');
-
-  // Tutorial States
+  const [userEnergy, setUserEnergy] = useState<'Baixa' | 'Média' | 'Alta'>('Média');
   const [tutorialStep, setTutorialStep] = useState<number | null>(null);
-  const [dopamenuGuideStep, setDopamenuGuideStep] = useState<number | null>(null);
-  const [matrixGuideStep, setMatrixGuideStep] = useState<number | null>(null);
-  const [captureGuideStep, setCaptureGuideStep] = useState<number | null>(null);
-  const [focusGuideStep, setFocusGuideStep] = useState<number | null>(null);
-  const [routinesGuideStep, setRoutinesGuideStep] = useState<number | null>(null);
-  const [habitsGuideStep, setHabitsGuideStep] = useState<number | null>(null);
-
-  // Sync theme with body class
-  useEffect(() => {
-    if (isDarkMode) {
-      document.body.classList.remove('light-mode');
-    } else {
-      document.body.classList.add('light-mode');
-    }
-    localStorage.setItem('neuro-dark-mode', isDarkMode.toString());
-  }, [isDarkMode]);
-
-  // Neural Levels Calculation
-  const neuralProfile = useMemo(() => {
-    const current = [...LEVELS].reverse().find(l => points >= l.minPoints) || LEVELS[0];
-    const next = LEVELS.find(l => points < l.minPoints);
-    const progress = next 
-      ? ((points - current.minPoints) / (next.minPoints - current.minPoints)) * 100 
-      : 100;
-    return { ...current, nextLevel: next, progress };
-  }, [points]);
-
-  // Cloud Sync Core Logic
-  const handlePushToCloud = useCallback(async () => {
-    if (!userEmail || userEmail === '') return;
-    setIsSyncing(true);
-    const data = { 
-      tasks, recurringTasks, habits, points, dopamenuItems, dailyMissions, visualTheme, isDarkMode, currentArousal
-    };
-    const success = await syncService.pushData(userEmail, data);
-    if (success) setLastSynced(Date.now());
-    setIsSyncing(false);
-  }, [userEmail, tasks, recurringTasks, habits, points, dopamenuItems, dailyMissions, visualTheme, isDarkMode, currentArousal]);
-
-  const handlePullFromCloud = useCallback(async (email: string) => {
-    if (!email) return;
-    setIsSyncing(true);
-    try {
-      const cloudData = await syncService.pullData(email);
-      if (cloudData) {
-        setTasks(cloudData.tasks || []);
-        setRecurringTasks(cloudData.recurringTasks || []);
-        setHabits(cloudData.habits || []);
-        setPoints(cloudData.points || 0);
-        setDopamenuItems(cloudData.dopamenuItems || INITIAL_DOPAMENU);
-        if (cloudData.visualTheme) setVisualTheme(cloudData.visualTheme);
-        if (cloudData.isDarkMode !== undefined) setIsDarkMode(cloudData.isDarkMode);
-        if (cloudData.dailyMissions) setDailyMissions(cloudData.dailyMissions);
-        if (cloudData.currentArousal) setCurrentArousal(cloudData.currentArousal);
-        setLastSynced(cloudData.updatedAt || Date.now());
-      }
-    } catch (e) { console.error("Failed to pull data", e); }
-    setIsSyncing(false);
-  }, []);
-
-  // Initial Load
-  useEffect(() => {
-    const localData = localStorage.getItem('neuro_executor_data_v5');
-    if (localData) {
-      const parsed = JSON.parse(localData);
-      setTasks(parsed.tasks || []);
-      setRecurringTasks(parsed.recurringTasks || []);
-      setHabits(parsed.habits || []);
-      setPoints(parsed.points || 0);
-      setDopamenuItems(parsed.dopamenuItems || INITIAL_DOPAMENU);
-      if (parsed.dailyMissions) setDailyMissions(parsed.dailyMissions);
-      if (parsed.currentArousal) setCurrentArousal(parsed.currentArousal);
-    }
-    setIsDataLoaded(true);
-    if (userEmail) handlePullFromCloud(userEmail);
-    if (!localStorage.getItem('neuro-tutorial-v4-seen')) setTutorialStep(0);
-  }, []);
-
-  // Always-On Synchronization (Debounced)
-  useEffect(() => {
-    if (!isDataLoaded) return;
-    const dataToSave = { tasks, recurringTasks, habits, points, dopamenuItems, dailyMissions, visualTheme, isDarkMode, currentArousal };
-    localStorage.setItem('neuro_executor_data_v5', JSON.stringify(dataToSave));
-    
-    const syncTimeout = setTimeout(() => {
-      handlePushToCloud();
-    }, 1500); // 1.5s debounce for cloud sync
-
-    return () => clearTimeout(syncTimeout);
-  }, [tasks, recurringTasks, habits, points, dopamenuItems, dailyMissions, isDataLoaded, handlePushToCloud, visualTheme, isDarkMode, currentArousal]);
-
-  // Timer Flow
+  const [newTaskText, setNewTaskText] = useState("");
   const [timeLeft, setTimeLeft] = useState(90 * 60);
   const [isTimerActive, setIsTimerActive] = useState(false);
-  const [isDecomposing, setIsDecomposing] = useState(false);
-  const [newTaskText, setNewTaskText] = useState("");
+  const [currentPeriod, setCurrentPeriod] = useState<DayPeriod>('Day');
+  const [rescueProtocol, setRescueProtocol] = useState<PanicSolution | null>(null);
+  const [showHabitForm, setShowHabitForm] = useState(false);
+  const [showRecurringForm, setShowRecurringForm] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
 
-  useEffect(() => {
-    let interval: any;
-    if (isTimerActive && timeLeft > 0) {
-      interval = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
-    } else if (timeLeft === 0) {
-      setIsTimerActive(false);
-      playAudio(SOUNDS.TIMER_END);
-    }
-    return () => clearInterval(interval);
-  }, [isTimerActive, timeLeft, playAudio]);
+  const editingTask = useMemo(() => tasks.find(t => t.id === editingTaskId) || null, [tasks, editingTaskId]);
+  const timerRef = useRef<number | null>(null);
+  const syncTimeoutRef = useRef<number | null>(null);
+  const energyRank = { 'Baixa': 1, 'Média': 2, 'Alta': 3 };
 
-  // Handlers
-  const handleSetEmail = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!emailInput.includes('@')) return;
-    setUserEmail(emailInput);
-    localStorage.setItem('neuro-user-email', emailInput);
-    setShowSyncModal(false);
-    await handlePullFromCloud(emailInput);
-  };
-
-  const addTask = (text: string, p: Priority = Priority.Q2) => {
-    if (!text.trim()) return;
-    const t: Task = {
-      id: crypto.randomUUID(),
-      text, priority: p, energy: 'Média', capacityNeeded: currentArousal,
-      completed: false, subtasks: [], date: selectedDate, createdAt: Date.now()
-    };
-    setTasks(prev => [t, ...prev]);
-  };
-
-  const toggleTask = (id: string) => {
-    setTasks(prev => prev.map(t => {
-      if (t.id === id) {
-        if (!t.completed) {
-          setPoints(p => p + 25);
-          playAudio(SOUNDS.TASK_COMPLETE);
-          setJustCompletedTaskId(id);
-          setTimeout(() => setJustCompletedTaskId(null), 1000);
-        }
-        return { ...t, completed: !t.completed };
-      }
-      return t;
-    }));
-  };
-
-  const updateHabit = (id: string, updates: Partial<Habit>) => {
-    setHabits(prev => prev.map(h => h.id === id ? { ...h, ...updates } : h));
-  };
-
-  const updateRecurringTaskEnergy = (id: string) => {
-    setRecurringTasks(prev => prev.map(rt => {
-      if (rt.id === id) {
-        const nextEnergy: Task['energy'] = rt.energy === 'Baixa' ? 'Média' : rt.energy === 'Média' ? 'Alta' : 'Baixa';
-        return { ...rt, energy: nextEnergy };
-      }
-      return rt;
-    }));
-  };
-
-  const completeHabit = (id: string) => {
-    const today = new Date().toISOString().split('T')[0];
-    setHabits(prev => prev.map(h => {
-      if (h.id === id && h.lastCompleted !== today) {
-        setPoints(p => p + 50);
-        playAudio(SOUNDS.HABIT_COMPLETE);
-        return { 
-          ...h, streak: h.streak + 1, lastCompleted: today, 
-          completedDates: [...(h.completedDates || []), today] 
-        };
-      }
-      return h;
-    }));
-  };
-
-  const updateDailyMission = (id: number, updates: Partial<DailyMission>) => {
-    setDailyMissions(prev => prev.map(m => {
-      if (m.id === id) {
-        if (updates.completed && !m.completed) {
-          setPoints(p => p + 100);
-          playAudio(SOUNDS.TASK_COMPLETE);
-          setJustCompletedMissionId(id);
-          setTimeout(() => setJustCompletedMissionId(null), 1000);
-        }
-        return { ...m, ...updates };
-      }
-      return m;
-    }));
-  };
-
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  };
-
-  const nextGuideStep = (currentStep: number | null, steps: any[], setter: (val: number | null) => void) => {
-    if (currentStep === null) return;
-    const next = currentStep + 1;
-    if (next < steps.length) setter(next);
-    else setter(null);
-  };
-
-  const last7Days = useMemo(() => {
-    return Array.from({ length: 7 }).map((_, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() - (6 - i));
-      return d.toISOString().split('T')[0];
-    });
+  const playAudio = useCallback((url: string) => {
+    new Audio(url).play().catch(() => {});
   }, []);
 
-  const dayTasks = useMemo(() => tasks.filter(t => t.date === selectedDate), [tasks, selectedDate]);
-  const executableList = useMemo(() => {
-    const today = new Date().toISOString().split('T')[0];
-    const normalTasks = dayTasks.filter(t => !t.completed);
-    const relevantRecurring = recurringTasks.filter(rt => !rt.completedDates.includes(today));
-    const combined = [
-      ...normalTasks,
-      ...relevantRecurring.map(rt => ({ ...rt, completed: false, subtasks: [], date: today, createdAt: 0, capacityNeeded: 'Neutro' as BrainCapacity, isRecurring: true }))
-    ];
-    return combined.filter(t => {
-      if (currentArousal === 'Exausto') return t.energy === 'Baixa';
-      if (currentArousal === 'Neutro') return t.energy === 'Baixa' || t.energy === 'Média';
-      return true;
-    });
-  }, [dayTasks, recurringTasks, currentArousal]);
+  const triggerPush = useCallback(async () => {
+    if (!userEmail) return;
+    setSyncStatus('syncing');
+    const dataToPush = { tasks, recurringTasks, habits, points, upgrades, achievements, timebox };
+    const success = await syncService.pushData(userEmail, dataToPush);
+    if (success) {
+      setSyncStatus('synced');
+      setLastRemoteUpdate(Date.now());
+    } else {
+      setSyncStatus('error');
+    }
+  }, [userEmail, tasks, recurringTasks, habits, points, upgrades, achievements, timebox]);
 
-  // Forms state
-  const [showHabitForm, setShowHabitForm] = useState(false);
-  const [habitForm, setHabitForm] = useState({ text: '', anchor: '', tinyAction: '' });
-  const [showRecurringForm, setShowRecurringForm] = useState(false);
-  const [recurringForm, setRecurringForm] = useState({ text: '', frequency: Frequency.DAILY, energy: 'Baixa' as Task['energy'] });
-  const [showDopamenuForm, setShowDopamenuForm] = useState(false);
-  const [dopamenuForm, setDopamenuForm] = useState<Omit<DopamenuItem, 'id'>>({ category: 'Starter', label: '', description: '' });
+  useEffect(() => {
+    if (!isDataLoaded || !userEmail) return;
+    if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+    syncTimeoutRef.current = window.setTimeout(triggerPush, 2000);
+  }, [tasks, recurringTasks, habits, points, upgrades, achievements, timebox, userEmail, isDataLoaded]);
+
+  useEffect(() => {
+    if (!userEmail) return;
+    const interval = setInterval(async () => {
+      const remote = await syncService.pullData(userEmail);
+      if (remote && remote.updatedAt > lastRemoteUpdate) {
+        setTasks(remote.tasks || []);
+        setRecurringTasks(remote.recurringTasks || []);
+        setHabits(remote.habits || []);
+        setPoints(remote.points || 0);
+        setTimebox(remote.timebox || []);
+        setUpgrades(remote.upgrades || INITIAL_UPGRADES);
+        setAchievements(remote.achievements || INITIAL_ACHIEVEMENTS);
+        setLastRemoteUpdate(remote.updatedAt);
+        setSyncStatus('synced');
+        playAudio(SOUNDS.BLOCK_SYNC);
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [userEmail, lastRemoteUpdate]);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const email = (e.target as any).email.value;
+    if (!email) return;
+    setUserEmail(email);
+    localStorage.setItem('neuro-user-email', email);
+    setSyncStatus('syncing');
+    const remote = await syncService.pullData(email);
+    if (remote) {
+      setTasks(remote.tasks || []);
+      setRecurringTasks(remote.recurringTasks || []);
+      setHabits(remote.habits || []);
+      setPoints(remote.points || 0);
+      setTimebox(remote.timebox || []);
+      setUpgrades(remote.upgrades || INITIAL_UPGRADES);
+      setAchievements(remote.achievements || INITIAL_ACHIEVEMENTS);
+      setLastRemoteUpdate(remote.updatedAt);
+      setSyncStatus('synced');
+    }
+  };
+
+  useEffect(() => {
+    if (isTimerActive && timeLeft > 0) {
+      timerRef.current = window.setInterval(() => setTimeLeft(t => t - 1), 1000);
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current);
+    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [isTimerActive]);
+
+  useEffect(() => {
+    const updatePeriod = () => {
+      const hour = new Date().getHours();
+      if (hour >= 5 && hour < 12) setCurrentPeriod('Morning');
+      else if (hour >= 12 && hour < 18) setCurrentPeriod('Day');
+      else if (hour >= 18 && hour < 22) setCurrentPeriod('Evening');
+      else setCurrentPeriod('Night');
+    };
+    updatePeriod();
+    const interval = setInterval(updatePeriod, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const local = localStorage.getItem('neuro_v11');
+    if (local) {
+      const p = JSON.parse(local);
+      setTasks(p.tasks || []);
+      setRecurringTasks(p.recurringTasks || []);
+      setHabits(p.habits || []);
+      setPoints(p.points || 0);
+      setTimebox(p.timebox || []);
+      setUpgrades(p.upgrades || INITIAL_UPGRADES);
+      setAchievements(p.achievements || INITIAL_ACHIEVEMENTS);
+    }
+    setIsDataLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isDataLoaded) return;
+    localStorage.setItem('neuro_v11', JSON.stringify({ tasks, recurringTasks, habits, points, upgrades, achievements, timebox }));
+  }, [tasks, recurringTasks, habits, points, upgrades, achievements, timebox, isDataLoaded]);
+
+  const handleSmartCapture = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const taskInput = newTaskText.trim();
+    if (!taskInput) return;
+    const tempId = crypto.randomUUID();
+    const tempTask: Task = {
+      id: tempId,
+      text: taskInput, // Mantém o texto original do usuário
+      priority: Priority.Q2,
+      energy: 'Média',
+      capacityNeeded: 'Neutro',
+      completed: false,
+      subtasks: [],
+      date: new Date().toISOString().split('T')[0],
+      createdAt: Date.now(),
+      isRefining: true
+    };
+    setTasks(prev => [tempTask, ...prev]);
+    setNewTaskText("");
+    setPoints(p => p + 15);
+    playAudio(SOUNDS.CAPTURE);
+    try {
+      const parsed = await geminiService.parseNaturalTask(taskInput);
+      setTasks(prev => prev.map(t => t.id === tempId ? {
+        ...t,
+        // Removemos o uso de parsed.text para garantir que o nome nunca mude
+        priority: (parsed.priority as Priority) || t.priority,
+        energy: (parsed.energy as any) || t.energy,
+        subtasks: parsed.subtasks || [],
+        isRefining: false
+      } : t));
+    } catch (error) {
+      setTasks(prev => prev.map(t => t.id === tempId ? { ...t, isRefining: false } : t));
+    }
+  };
+
+  const handleRescue = async () => {
+    const activeTask = tasks.find(t => !t.completed && isTaskCompatible(t));
+    if (!activeTask) return;
+    try {
+      const rescue = await geminiService.rescueTask(activeTask.text, "Paralisia de baixa energia ou sobrecarga cognitiva");
+      setRescueProtocol(rescue);
+    } catch (e) {}
+  };
+
+  const completeTask = (id: string) => {
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
+    setPoints(p => p + 100);
+    playAudio(SOUNDS.TASK_COMPLETE);
+    if (editingTaskId === id) setEditingTaskId(null);
+  };
+
+  const updateTaskDetails = (id: string, updates: Partial<Task>) => {
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+  };
+
+  const handleDragStart = (e: React.DragEvent, taskId: string) => {
+    e.dataTransfer.setData('taskId', taskId);
+  };
+
+  const handleDrop = (e: React.DragEvent, priority: Priority) => {
+    e.preventDefault();
+    const taskId = e.dataTransfer.getData('taskId');
+    updateTaskDetails(taskId, { priority });
+    playAudio(SOUNDS.UPGRADE);
+  };
+
+  const isTaskCompatible = (task: Task) => energyRank[task.energy] <= energyRank[userEnergy];
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Timebox Handlers
+  const addTimeboxSlot = () => {
+    const lastEntry = timebox[timebox.length - 1];
+    const nextStart = lastEntry ? lastEntry.end : "08:00";
+    const nextEnd = lastEntry ? (parseInt(lastEntry.end.split(':')[0]) + 1).toString().padStart(2, '0') + ":00" : "09:00";
+    
+    const newEntry: TimeboxEntry = {
+      id: crypto.randomUUID(),
+      start: nextStart,
+      end: nextEnd,
+      activity: "",
+      completed: false
+    };
+    setTimebox([...timebox, newEntry]);
+  };
+
+  const updateTimeboxEntry = (id: string, updates: Partial<TimeboxEntry>) => {
+    setTimebox(prev => prev.map(entry => entry.id === id ? { ...entry, ...updates } : entry));
+  };
+
+  const removeTimeboxEntry = (id: string) => {
+    setTimebox(prev => prev.filter(entry => entry.id !== id));
+  };
 
   return (
-    <div className={`min-h-screen flex flex-col md:flex-row transition-all duration-700 bg-[#020617] text-white ${visualTheme}`}>
+    <div className={`min-h-screen flex flex-col md:flex-row bg-[#020617] text-white transition-all duration-700 ${visualTheme} ${!isDarkMode ? 'light-mode' : ''}`}>
       
-      {/* Sidebar - Desktop */}
-      <nav className={`hidden md:flex md:flex-col md:w-72 md:h-screen border-r border-slate-800 bg-[#0a1128]/95 z-50`}>
-        <div className="flex flex-col p-8 space-y-8">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3"><SynapseLogo /><h1 className="text-xl font-black italic text-orange-600 uppercase">Neuro</h1></div>
-            <div className="flex gap-2">
-              <button onClick={() => setSoundEnabled(!soundEnabled)} className="p-2 rounded-xl bg-slate-800/50 text-slate-400 hover:text-white transition-colors">
-                {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+      {/* SIDEBAR DESKTOP */}
+      <aside className="hidden md:flex flex-col w-72 h-screen border-r border-slate-800 bg-[#0a1128]/95 p-8 space-y-6 z-50 overflow-y-auto no-scrollbar">
+        <div className="flex items-center gap-3"><SynapseLogo /><h1 className="text-xl font-black italic text-orange-600 uppercase">Neuro</h1></div>
+        <div className="p-4 bg-slate-900/50 border border-slate-800 rounded-3xl space-y-3 relative group">
+           <div className="flex justify-between items-center">
+              <p className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Neuro-Identity</p>
+              <div className={`w-2 h-2 rounded-full ${syncStatus === 'synced' ? 'bg-green-500 shadow-glow-green' : syncStatus === 'syncing' ? 'bg-orange-500 animate-pulse' : syncStatus === 'error' ? 'bg-red-500' : 'bg-slate-700'}`}></div>
+           </div>
+           {userEmail ? (
+             <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-bold truncate text-slate-300">{userEmail}</span>
+                <button onClick={() => { setUserEmail(''); localStorage.removeItem('neuro-user-email'); }} className="text-[8px] font-black uppercase text-red-500/60 hover:text-red-500 transition-colors">Sair / Desconectar</button>
+             </div>
+           ) : (
+             <form onSubmit={handleLogin} className="flex flex-col gap-2">
+                <input name="email" type="email" placeholder="Seu e-mail..." className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-[10px] outline-none focus:border-orange-500 transition-all" required />
+                <button type="submit" className="w-full py-2 bg-orange-600 rounded-xl text-[9px] font-black uppercase shadow-glow-orange hover:scale-105 active:scale-95 transition-all">Sincronizar Cloud</button>
+             </form>
+           )}
+        </div>
+        <div className="p-4 bg-slate-900/50 border border-slate-800 rounded-3xl space-y-3">
+          <p className="text-[9px] font-black uppercase text-slate-500 tracking-widest text-center">Bateria Biológica</p>
+          <div className="flex justify-between items-center gap-2">
+            {[
+              { val: 'Baixa', color: 'text-red-500', icon: <BatteryLow size={18}/> },
+              { val: 'Média', color: 'text-yellow-500', icon: <BatteryMedium size={18}/> },
+              { val: 'Alta', color: 'text-green-500', icon: <BatteryFull size={18}/> }
+            ].map(e => (
+              <button key={e.val} onClick={() => setUserEnergy(e.val as any)} className={`flex-1 flex flex-col items-center p-2 rounded-xl transition-all ${userEnergy === e.val ? 'bg-slate-800 shadow-glow-orange scale-110' : 'opacity-40 hover:opacity-60'}`}>
+                <div className={e.color}>{e.icon}</div>
+                <span className="text-[8px] font-black uppercase mt-1">{e.val}</span>
               </button>
-              <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded-xl bg-slate-800/50 text-slate-400 hover:text-white transition-colors">
-                {isDarkMode ? <Sun size={16} /> : <Moon size={16} />}
-              </button>
-            </div>
-          </div>
-          
-          <div className="space-y-3">
-            <div className="flex justify-between items-end">
-              <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Nível Neural {neuralProfile.level}</p>
-              <p className="text-[8px] font-black text-orange-500">{points} XP</p>
-            </div>
-            <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-               <div className="h-full bg-orange-600 transition-all duration-1000" style={{ width: `${neuralProfile.progress}%` }}></div>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Capacidade Atual</p>
-            <div className="flex gap-2">
-              <ArousalButton active={currentArousal === 'Exausto'} onClick={() => setCurrentArousal('Exausto')} icon={<BatteryLow size={16}/>} label="Baixa" />
-              <ArousalButton active={currentArousal === 'Neutro'} onClick={() => setCurrentArousal('Neutro')} icon={<BatteryMedium size={16}/>} label="Neutro" />
-              <ArousalButton active={currentArousal === 'Hiperfocado'} onClick={() => setCurrentArousal('Hiperfocado')} icon={<BatteryFull size={16}/>} label="Pico" />
-            </div>
+            ))}
           </div>
         </div>
+        <nav className="flex-1 space-y-1">
+          <NavBtn icon={<ListTodo/>} label="Captura" active={activeTab === 'capture'} onClick={() => setActiveTab('capture')}/>
+          <NavBtn icon={<Timer/>} label="Executar" active={activeTab === 'execute'} onClick={() => setActiveTab('execute')}/>
+          <NavBtn icon={<LayoutGrid/>} label="Matriz" active={activeTab === 'plan'} onClick={() => setActiveTab('plan')}/>
+          <NavBtn icon={<RefreshCw/>} label="Hábitos" active={activeTab === 'habits'} onClick={() => setActiveTab('habits')}/>
+          <NavBtn icon={<CalendarRange/>} label="Rotinas" active={activeTab === 'fixed'} onClick={() => setActiveTab('fixed')}/>
+          <NavBtn icon={<TrendingUp/>} label="Evolução" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')}/>
+          <NavBtn icon={<Binary/>} label="Upgrades" active={activeTab === 'upgrades'} onClick={() => setActiveTab('upgrades')}/>
+        </nav>
+      </aside>
 
-        <div className="flex flex-col gap-2 px-4">
-          <NavButton icon={<Timer />} label="Focar" active={activeTab === 'execute'} onClick={() => setActiveTab('execute')} />
-          <NavButton icon={<TrendingUp />} label="Evolução" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
-          <NavButton icon={<ListTodo />} label="Captura" active={activeTab === 'capture'} onClick={() => setActiveTab('capture')} />
-          <NavButton icon={<UtensilsCrossed />} label="Dopamenu" active={activeTab === 'dopamenu'} onClick={() => setActiveTab('dopamenu')} />
-          <NavButton icon={<LayoutGrid />} label="Matriz" active={activeTab === 'plan'} onClick={() => setActiveTab('plan')} />
-          <NavButton icon={<CalendarRange />} label="Rotinas" active={activeTab === 'fixed'} onClick={() => setActiveTab('fixed')} />
-          <NavButton icon={<RefreshCw />} label="Hábitos" active={activeTab === 'habits'} onClick={() => setActiveTab('habits')} />
-          <NavButton icon={<Binary />} label="Upgrades" active={activeTab === 'upgrades'} onClick={() => setActiveTab('upgrades')} />
-        </div>
-
-        <div className="mt-auto border-t border-slate-800/50 p-4">
-          <button onClick={() => setShowSyncModal(true)} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-bold text-xs transition-all ${userEmail ? 'text-green-500 bg-green-500/5' : 'text-slate-500 hover:bg-slate-800/30'}`}> 
-            {isSyncing ? <CloudSync className="animate-spin" size={18}/> : userEmail ? <Cloud size={18} className={isSyncing ? "animate-pulse" : ""}/> : <CloudOff size={18}/>} 
-            {userEmail ? 'NeuroSync Ativo' : 'Ativar NeuroSync'}
+      {/* MAIN */}
+      <main className="flex-1 overflow-y-auto p-4 md:p-10 pb-32 relative">
+        {TUTORIAL_DATA[activeTab] && (
+          <button onClick={() => setTutorialStep(0)} className="fixed top-6 right-6 z-40 w-12 h-12 bg-slate-900 border border-slate-800 rounded-full flex items-center justify-center text-orange-500 hover:scale-110 active:scale-95 transition-all shadow-glow-orange/20">
+            <HelpCircle size={24}/>
           </button>
-        </div>
-      </nav>
+        )}
 
-      {/* Mobile Header */}
-      <div className="md:hidden flex flex-col w-full bg-[#0a1128] border-b border-slate-800 z-50 sticky top-0">
-        <div className="flex items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-2"><SynapseLogo className="w-6 h-6"/><h1 className="text-sm font-black italic text-orange-600 uppercase">Neuro</h1></div>
-          <div className="flex items-center gap-4">
-            <div className="flex flex-col items-end">
-              <span className="text-[10px] font-black text-orange-500 uppercase">{points} XP</span>
-              <div className="h-1 w-16 bg-slate-800 rounded-full mt-1 overflow-hidden">
-                <div className="h-full bg-orange-600" style={{ width: `${neuralProfile.progress}%` }}></div>
-              </div>
-            </div>
-            <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 text-slate-400"><Moon size={18}/></button>
-          </div>
-        </div>
-        <div className="flex gap-1 px-4 pb-4">
-          {['Exausto', 'Neutro', 'Hiperfocado'].map((c) => (
-            <button 
-              key={c}
-              onClick={() => setCurrentArousal(c as BrainCapacity)} 
-              className={`flex-1 py-2 rounded-xl border text-[9px] font-black uppercase transition-all flex items-center justify-center gap-2 ${currentArousal === c ? 'bg-orange-600/10 border-orange-500 text-orange-500' : 'border-slate-800 text-slate-500'}`}
-            >
-              {c === 'Exausto' && <BatteryLow size={12}/>}
-              {c === 'Neutro' && <BatteryMedium size={12}/>}
-              {c === 'Hiperfocado' && <BatteryFull size={12}/>}
-              {c}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <main className="flex-1 overflow-y-auto pb-32 md:pb-8 p-4 md:p-10">
-        <div className="max-w-5xl mx-auto space-y-8">
-          
-          {activeTab === 'dashboard' && (
-            <div className="space-y-6 animate-in fade-in duration-700">
-               <h2 className="text-3xl font-black italic uppercase text-orange-600">Dashboard Neural</h2>
-               <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                  <div className="lg:col-span-3 p-6 md:p-8 border rounded-[32px] md:rounded-[48px] bg-slate-900/60 border-slate-800 space-y-8">
-                     <h3 className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em]">Consistência Semanal</h3>
-                     <div className="grid grid-cols-7 gap-2 md:gap-4 overflow-x-auto pb-4">
-                        {last7Days.map((day) => {
-                           const isToday = day === selectedDate;
-                           const habitCount = habits.filter(h => h.completedDates?.includes(day)).length;
-                           const routineCount = recurringTasks.filter(rt => rt.completedDates?.includes(day)).length;
-                           return (
-                              <div key={day} className={`flex flex-col items-center gap-4 min-w-[40px] p-2 md:p-4 rounded-2xl transition-all ${isToday ? 'bg-orange-600/5 ring-1 ring-orange-500/20' : ''}`}>
-                                 <span className={`text-[8px] md:text-[10px] font-black uppercase ${isToday ? 'text-orange-500' : 'text-slate-600'}`}>
-                                   {new Date(day + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')}
-                                 </span>
-                                 <div className="flex flex-col gap-1 flex-1 justify-end min-h-[80px] md:min-h-[120px]">
-                                    <div className="w-3 md:w-4 bg-orange-600 rounded-full" style={{ height: `${Math.max(4, habitCount * 15)}px` }}></div>
-                                    <div className="w-3 md:w-4 bg-purple-600 rounded-full" style={{ height: `${Math.max(4, routineCount * 15)}px` }}></div>
-                                 </div>
-                              </div>
-                           );
-                        })}
-                     </div>
-                  </div>
-                  <div className="p-8 border rounded-[32px] bg-orange-600/5 border-orange-500/10 flex flex-col items-center justify-center text-center gap-4">
-                     <Trophy className="text-orange-500" size={32}/>
-                     <p className="text-3xl font-black italic text-orange-600">{points} XP</p>
-                  </div>
-               </div>
-            </div>
-          )}
-
-          {activeTab === 'execute' && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-700">
-              <div className="lg:col-span-2 space-y-6">
-                <div className="flex items-center gap-4 px-2">
-                  <h2 className="text-3xl font-black italic uppercase text-orange-600">Foco</h2>
-                  <button onClick={() => setFocusGuideStep(0)} className="text-slate-500"><HelpCircle size={20}/></button>
-                </div>
-
-                <div className="p-8 text-center border rounded-[32px] md:rounded-[48px] bg-slate-900/60 border-slate-800 relative overflow-hidden shadow-xl">
-                  <div className="absolute top-0 left-0 w-full h-1 bg-slate-800">
-                    <div className="h-full bg-orange-600 transition-all duration-1000" style={{ width: `${(timeLeft / (90 * 60)) * 100}%` }}></div>
-                  </div>
-                  <h2 className="text-6xl md:text-[100px] leading-none font-mono font-black tabular-nums mb-6">{formatTime(timeLeft)}</h2>
-                  <div className="flex justify-center gap-4 md:gap-6">
-                    <button onClick={() => setIsTimerActive(!isTimerActive)} className="w-16 h-16 md:w-20 md:h-20 bg-orange-600 rounded-2xl md:rounded-[32px] flex items-center justify-center shadow-glow-orange active:scale-95 transition-all">{isTimerActive ? <Pause size={24}/> : <Play size={24} fill="currentColor"/>}</button>
-                    <button onClick={() => setTimeLeft(90*60)} className="w-16 h-16 md:w-20 md:h-20 bg-slate-800/80 rounded-2xl md:rounded-[32px] flex items-center justify-center text-slate-400 hover:text-white transition-colors"><RotateCcw size={24}/></button>
-                  </div>
-                </div>
-
-                <div className="p-6 md:p-10 border rounded-[32px] md:rounded-[48px] bg-slate-900/60 border-slate-800 shadow-lg space-y-6">
-                  <h3 className="text-[10px] font-black uppercase text-orange-500 tracking-[0.2em] flex items-center gap-2"><Target size={12}/> Protocolo: 3 Missões</h3>
-                  <div className="space-y-3">
-                    {dailyMissions.map((mission) => (
-                      <div key={mission.id} className={`p-4 md:p-6 rounded-2xl md:rounded-[32px] border transition-all flex items-center gap-4 md:gap-6 ${mission.completed ? 'bg-green-600/5 border-green-500/20 opacity-60' : 'bg-slate-800/30 border-slate-700/30'}`}>
-                        <button onClick={() => updateDailyMission(mission.id, { completed: !mission.completed })} className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${mission.completed ? 'bg-green-600 text-white' : 'bg-slate-900 border border-slate-700'}`}>
-                          <Check size={14} strokeWidth={3} className={mission.completed ? "animate-in zoom-in" : "text-transparent"} />
-                        </button>
-                        <input type="text" placeholder={`Missão #${mission.id}...`} className={`flex-1 bg-transparent border-none outline-none font-bold text-base md:text-lg ${mission.completed ? 'line-through text-slate-500' : ''}`} value={mission.text} onChange={(e) => updateDailyMission(mission.id, { text: e.target.value })} />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-6">
-                <div className="p-6 md:p-8 border rounded-[32px] bg-slate-900/60 border-slate-800 shadow-lg">
-                  <h3 className="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-4">Próximas na Fila</h3>
-                  <div className="space-y-2">
-                    {executableList.map(t => (
-                      <button key={t.id} onClick={() => setSelectedTask(t as any)} className={`w-full p-4 text-left border rounded-2xl transition-all ${selectedTask?.id === t.id ? 'border-orange-500 bg-orange-500/5' : 'border-slate-800 bg-slate-800/20'}`}>
-                        <span className="text-xs font-bold truncate block">{t.text}</span>
-                      </button>
-                    ))}
-                    {executableList.length === 0 && <p className="text-center py-8 text-[9px] text-slate-600 font-black uppercase">Vazio</p>}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'plan' && (
-            <div className="space-y-6 animate-in fade-in duration-500">
-              <div className="flex items-center gap-4 px-2">
-                <h2 className="text-3xl font-black italic uppercase text-orange-600">Matriz</h2>
-                <button onClick={() => setMatrixGuideStep(0)} className="text-slate-500"><HelpCircle size={20}/></button>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <MatrixQuadrant priority={Priority.Q1} title="Q1: Crítico" color="bg-red-600/5 border-red-500/20" tasks={dayTasks.filter(t => t.priority === Priority.Q1 && !t.completed)} onSelect={(t) => setEditingTask(t)} onUpdateEnergy={() => {}} currentArousal={currentArousal} onDrop={() => {}} />
-                <MatrixQuadrant priority={Priority.Q2} title="Q2: Estratégico" color="bg-orange-600/5 border-orange-500/20" tasks={dayTasks.filter(t => t.priority === Priority.Q2 && !t.completed)} onSelect={(t) => setEditingTask(t)} onUpdateEnergy={() => {}} currentArousal={currentArousal} onDrop={() => {}} />
-                <MatrixQuadrant priority={Priority.Q3} title="Q3: Delegar" color="bg-blue-600/5 border-blue-500/20" tasks={dayTasks.filter(t => t.priority === Priority.Q3 && !t.completed)} onSelect={(t) => setEditingTask(t)} onUpdateEnergy={() => {}} currentArousal={currentArousal} onDrop={() => {}} />
-                <MatrixQuadrant priority={Priority.Q4} title="Q4: Eliminar" color="bg-slate-800/20 border-slate-700/50" tasks={dayTasks.filter(t => t.priority === Priority.Q4 && !t.completed)} onSelect={(t) => setEditingTask(t)} onUpdateEnergy={() => {}} currentArousal={currentArousal} onDrop={() => {}} />
-              </div>
-            </div>
-          )}
-
+        <div className="max-w-6xl mx-auto space-y-10">
+          {/* TAB: CAPTURA */}
           {activeTab === 'capture' && (
-            <div className="max-w-3xl mx-auto py-12 md:py-24 space-y-12 text-center animate-in zoom-in">
-              <div className="flex items-center justify-center gap-4">
-                 <h2 className="text-4xl md:text-6xl font-black italic uppercase leading-tight">Captura</h2>
-                 <button onClick={() => setCaptureGuideStep(0)} className="text-slate-600"><HelpCircle size={24}/></button>
+            <div className="min-h-[80vh] flex flex-col justify-center animate-in fade-in zoom-in-95">
+              <div className="text-center space-y-4 mb-12">
+                <div className="w-20 h-20 bg-orange-600/10 rounded-full flex items-center justify-center mx-auto border border-orange-600/20 shadow-glow-orange"><BrainIcon className="text-orange-500" size={32}/></div>
+                <h2 className="text-5xl font-black uppercase italic tracking-tighter">Entrada Neural</h2>
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em]">Esvazie sua mente instantaneamente.</p>
               </div>
-              <div className="p-6 md:p-10 bg-slate-900 border border-slate-800 rounded-[32px] md:rounded-[64px] flex items-center gap-4 focus-within:ring-2 focus-within:ring-orange-600 transition-all shadow-2xl">
-                <input autoFocus className="flex-1 bg-transparent border-none text-xl md:text-3xl font-black outline-none placeholder:text-slate-800" placeholder="Esvazie a mente..." value={newTaskText} onChange={e => setNewTaskText(e.target.value)} onKeyDown={e => { if(e.key === 'Enter') { addTask(newTaskText); setNewTaskText(""); setActiveTab('plan'); }}} />
-                <button onClick={() => { addTask(newTaskText); setNewTaskText(""); setActiveTab('plan'); }} className="w-12 h-12 md:w-24 md:h-24 bg-orange-600 rounded-xl md:rounded-[40px] flex items-center justify-center shadow-glow-orange"><Plus size={24}/></button>
-              </div>
-            </div>
-          )}
-
-          {/* ... Outras abas (Fixed, Habits, Dopamenu, Upgrades) mantêm lógica similar, otimizadas com padding responsive ... */}
-          {activeTab === 'habits' && (
-            <div className="space-y-6 animate-in slide-in-from-bottom duration-700">
-              <div className="flex justify-between items-center px-2">
-                <h2 className="text-3xl font-black italic uppercase text-orange-600">Hábitos</h2>
-                <button onClick={() => setShowHabitForm(true)} className="w-12 h-12 bg-orange-600 rounded-xl flex items-center justify-center text-white shadow-glow-orange"><Plus size={24}/></button>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {habits.map(h => (
-                  <div key={h.id} className={`p-6 rounded-[32px] border bg-slate-900/60 border-slate-800 transition-all flex flex-col justify-between min-h-[300px]`}>
-                    <div className="space-y-4">
-                      <div className="flex justify-between items-start">
-                        <Flame className={h.streak > 0 ? "text-orange-500 animate-pulse" : "text-slate-800"} size={24} />
-                        <span className="text-3xl font-black italic leading-none">{h.streak}</span>
-                      </div>
-                      <input className="w-full bg-transparent border-none text-lg font-black uppercase outline-none" value={h.text} onChange={(e) => updateHabit(h.id, { text: e.target.value })} />
-                      <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Então: {h.tinyAction}</p>
+              <form onSubmit={handleSmartCapture} className="relative group max-w-2xl mx-auto w-full">
+                <div className="p-8 rounded-[48px] border-4 transition-all duration-500 bg-[#0a1128] border-slate-800 focus-within:border-orange-600 shadow-glow-orange/20">
+                  <div className="flex items-center gap-4">
+                    <input autoFocus value={newTaskText} onChange={e => setNewTaskText(e.target.value)} className="flex-1 bg-transparent border-none outline-none text-3xl font-black" placeholder="No que você está pensando?" onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) handleSmartCapture(e); }} />
+                    <button type="submit" className="w-16 h-16 bg-orange-600 rounded-3xl flex items-center justify-center shadow-glow-orange hover:scale-110 active:scale-95 transition-all"><Plus size={32}/></button>
+                  </div>
+                </div>
+              </form>
+              <div className="max-w-xl mx-auto w-full mt-10 space-y-3">
+                {tasks.slice(0, 3).map(t => (
+                  <div key={t.id} className={`p-4 rounded-2xl bg-slate-900/50 border border-slate-800 flex items-center justify-between animate-in slide-in-from-top-4 ${t.isRefining ? 'border-orange-500/50 shadow-glow-orange/10 italic opacity-70' : ''}`}>
+                    <div className="flex items-center gap-3">
+                      {t.isRefining ? <Loader2 className="animate-spin text-orange-500" size={16}/> : <CheckCircle2 className="text-slate-600" size={16}/>}
+                      <span className="text-xs font-bold uppercase tracking-tight">{t.text}</span>
                     </div>
-                    <button onClick={() => completeHabit(h.id)} disabled={h.lastCompleted === selectedDate} className={`mt-6 py-4 rounded-xl font-black text-xs transition-all ${h.lastCompleted === selectedDate ? 'bg-green-600/20 text-green-500' : 'bg-orange-600 text-white shadow-glow-orange'}`}>
-                      {h.lastCompleted === selectedDate ? 'Consolidado' : 'Consolidar'}
-                    </button>
+                    {t.isRefining && <span className="text-[8px] font-black uppercase text-orange-500 animate-pulse">Sintonizando IA...</span>}
                   </div>
                 ))}
               </div>
             </div>
           )}
 
+          {/* TAB: EXECUTAR */}
+          {activeTab === 'execute' && (
+            <div className="animate-in fade-in slide-in-from-bottom-10 space-y-12">
+              <div className="flex flex-col lg:flex-row gap-10">
+                {/* Timer & Main Action */}
+                <div className="flex-1 space-y-6">
+                  <div className="p-10 bg-slate-900 rounded-[64px] border border-slate-800 flex flex-col items-center justify-center space-y-8 relative overflow-hidden group min-h-[400px]">
+                    <div className="text-9xl font-black italic tracking-tighter tabular-nums text-white drop-shadow-2xl">{formatTime(timeLeft)}</div>
+                    <div className="flex gap-4">
+                      <button onClick={() => setIsTimerActive(!isTimerActive)} className="px-10 py-5 bg-white text-black rounded-3xl font-black uppercase flex items-center gap-3 hover:scale-105 active:scale-95 transition-all">{isTimerActive ? <><Pause size={20}/> Pausar</> : <><Play size={20}/> Fluxo</>}</button>
+                      <button onClick={() => setTimeLeft(90*60)} className="p-5 bg-slate-800 rounded-3xl hover:bg-slate-700 transition-colors"><RotateCcw size={20}/></button>
+                    </div>
+                  </div>
+
+                  {/* MINI TIMEBOX DIÁRIO */}
+                  <div className="p-8 bg-slate-900/40 border border-slate-800 rounded-[48px] space-y-6">
+                    <div className="flex justify-between items-center">
+                       <div className="flex items-center gap-3">
+                          <Clock className="text-orange-500" size={20}/>
+                          <h3 className="text-xl font-black uppercase italic tracking-tighter">Timebox Diário</h3>
+                       </div>
+                       <button onClick={addTimeboxSlot} className="p-2 bg-orange-600/10 text-orange-500 rounded-xl hover:bg-orange-600 hover:text-white transition-all"><Plus size={18}/></button>
+                    </div>
+                    <div className="space-y-3 max-h-[400px] overflow-y-auto no-scrollbar">
+                       {timebox.length === 0 ? (
+                         <p className="text-center py-10 text-[10px] font-black uppercase text-slate-600 border border-dashed border-slate-800 rounded-3xl">Nenhum bloco de tempo definido para hoje.</p>
+                       ) : (
+                         timebox.map((entry) => (
+                           <div key={entry.id} className={`group flex items-center gap-4 p-4 rounded-3xl border transition-all ${entry.completed ? 'bg-slate-950/50 border-slate-900 opacity-50' : 'bg-[#0a1128] border-slate-800 shadow-glow-orange/5 hover:border-orange-500/30'}`}>
+                              <div className="flex flex-col gap-1 w-20">
+                                 <input type="text" value={entry.start} onChange={e => updateTimeboxEntry(entry.id, { start: e.target.value })} className="bg-transparent text-[10px] font-black text-slate-500 outline-none w-full text-center hover:text-orange-500 transition-colors"/>
+                                 <div className="h-px bg-slate-800 w-full"/>
+                                 <input type="text" value={entry.end} onChange={e => updateTimeboxEntry(entry.id, { end: e.target.value })} className="bg-transparent text-[10px] font-black text-slate-500 outline-none w-full text-center hover:text-orange-500 transition-colors"/>
+                              </div>
+                              <input 
+                                type="text" 
+                                value={entry.activity} 
+                                onChange={e => updateTimeboxEntry(entry.id, { activity: e.target.value })} 
+                                placeholder="Descreva a atividade..."
+                                className={`flex-1 bg-transparent font-bold text-sm outline-none ${entry.completed ? 'line-through text-slate-500' : 'text-slate-200'}`}
+                              />
+                              <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                <button onClick={() => updateTimeboxEntry(entry.id, { completed: !entry.completed })} className={`p-2 rounded-lg transition-all ${entry.completed ? 'text-green-500 bg-green-500/10' : 'text-slate-500 hover:text-green-500 hover:bg-green-500/10'}`}><Check size={16}/></button>
+                                <button onClick={() => removeTimeboxEntry(entry.id)} className="p-2 rounded-lg text-slate-500 hover:text-red-500 hover:bg-red-500/10"><Trash2 size={16}/></button>
+                              </div>
+                           </div>
+                         ))
+                       )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Recommendations */}
+                <div className="w-full lg:w-96 flex flex-col gap-6">
+                  {(() => {
+                    const recommended = tasks.find(t => !t.completed && isTaskCompatible(t) && !t.isRefining);
+                    return recommended ? (
+                      <div className="p-8 bg-orange-600 rounded-[48px] shadow-glow-orange flex flex-col justify-between">
+                         <div className="space-y-2">
+                           <span className="text-[10px] font-black uppercase text-white/60">Bio-Compatível Agora</span>
+                           <h4 className="text-2xl font-black uppercase leading-tight">{recommended.text}</h4>
+                         </div>
+                         <button onClick={handleRescue} className="mt-8 flex items-center gap-3 py-4 bg-white/10 hover:bg-white/20 rounded-2xl text-[10px] font-black uppercase border border-white/20 transition-all">
+                            <LifeBuoy size={16} className="ml-4"/> Protocolo IA de Resgate
+                         </button>
+                      </div>
+                    ) : (
+                      <div className="p-8 bg-slate-900/50 border border-slate-800 border-dashed rounded-[48px] flex flex-col items-center justify-center text-center space-y-4">
+                         <ZapOff className="text-slate-700" size={48}/>
+                         <p className="text-[10px] font-black uppercase text-slate-500">Nenhuma tarefa pronta para sua energia {userEnergy}</p>
+                      </div>
+                    );
+                  })()}
+
+                  <div className="space-y-4">
+                     <h3 className="text-[10px] font-black uppercase text-slate-500 tracking-widest px-2">Fila Bio-Compatível</h3>
+                     <div className="space-y-3">
+                       {tasks.filter(t => !t.completed && isTaskCompatible(t)).slice(0, 5).map(t => (
+                         <div key={t.id} className="p-4 bg-slate-900 border border-slate-800 rounded-3xl flex items-center justify-between">
+                            <span className="text-xs font-bold uppercase truncate pr-4">{t.text}</span>
+                            <button onClick={() => completeTask(t.id)} className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center hover:bg-orange-600 transition-all"><Check size={14}/></button>
+                         </div>
+                       ))}
+                     </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: MATRIZ */}
+          {activeTab === 'plan' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in">
+              {[
+                { q: Priority.Q1, label: 'Crise & Foco', color: 'border-red-500/30 bg-red-500/5' },
+                { q: Priority.Q2, label: 'Estratégico', color: 'border-orange-500/30 bg-orange-500/5' },
+                { q: Priority.Q3, label: 'Interrupções', color: 'border-blue-500/30 bg-blue-500/5' },
+                { q: Priority.Q4, label: 'Eliminar', color: 'border-slate-800 bg-slate-900/40' }
+              ].map(block => (
+                <div key={block.q} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, block.q)} className={`p-8 rounded-[48px] border min-h-[400px] flex flex-col space-y-6 transition-all duration-300 ${block.color} hover:border-white/20`}>
+                  <h3 className="text-xl font-black uppercase italic tracking-tighter">{block.label}</h3>
+                  <div className="flex-1 space-y-3 overflow-y-auto no-scrollbar">
+                    {tasks.filter(t => t.priority === block.q && !t.completed).map(t => (
+                      <div key={t.id} draggable={!t.isRefining} onDragStart={(e) => handleDragStart(e, t.id)} onClick={() => !t.isRefining && setEditingTaskId(t.id)} className={`p-5 rounded-2xl border cursor-pointer group transition-all transform active:scale-95 ${isTaskCompatible(t) && !t.isRefining ? 'bg-[#0a1128] border-slate-800 shadow-glow-orange/5' : 'bg-slate-950/40 border-slate-900 opacity-40'} ${t.isRefining ? 'animate-pulse' : ''}`}>
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-black uppercase text-slate-200">{t.text}</span>
+                          {!t.isRefining ? <GripVertical size={14} className="text-slate-700 group-hover:text-slate-500"/> : <Loader2 size={14} className="animate-spin text-orange-500"/>}
+                        </div>
+                        <div className="flex gap-2 mt-3">
+                           <span className="text-[7px] font-black uppercase bg-slate-800 px-2 py-0.5 rounded-full text-slate-500">{t.energy} Energia</span>
+                           {t.subtasks.length > 0 && <span className="text-[7px] font-black uppercase bg-slate-800 px-2 py-0.5 rounded-full text-blue-500">{t.subtasks.length} Subtarefas</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {activeTab === 'habits' && <HabitsView habits={habits} setHabits={setHabits} setPoints={setPoints} playAudio={playAudio} setShowHabitForm={setShowHabitForm}/>}
+          {activeTab === 'fixed' && <FixedView recurringTasks={recurringTasks} setRecurringTasks={setRecurringTasks} currentPeriod={currentPeriod} setPoints={setPoints} setShowRecurringForm={setShowRecurringForm}/>}
+          {activeTab === 'dashboard' && <DashboardView tasks={tasks} habits={habits} points={points} achievements={achievements}/>}
+          {activeTab === 'upgrades' && <UpgradesView upgrades={upgrades} points={points} setPoints={setPoints} setUpgrades={setUpgrades} playAudio={playAudio}/>}
         </div>
       </main>
 
-      {/* Fixed Mobile Navigation Bar */}
-      <nav className="md:hidden fixed bottom-0 left-0 w-full bg-[#0a1128]/95 backdrop-blur-xl border-t border-slate-800 z-50 overflow-x-auto flex px-4 py-2 gap-4 no-scrollbar">
-        <MobileNavButton icon={<Timer />} active={activeTab === 'execute'} onClick={() => setActiveTab('execute')} />
-        <MobileNavButton icon={<ListTodo />} active={activeTab === 'capture'} onClick={() => setActiveTab('capture')} />
-        <MobileNavButton icon={<LayoutGrid />} active={activeTab === 'plan'} onClick={() => setActiveTab('plan')} />
-        <MobileNavButton icon={<UtensilsCrossed />} active={activeTab === 'dopamenu'} onClick={() => setActiveTab('dopamenu')} />
-        <MobileNavButton icon={<CalendarRange />} active={activeTab === 'fixed'} onClick={() => setActiveTab('fixed')} />
-        <MobileNavButton icon={<RefreshCw />} active={activeTab === 'habits'} onClick={() => setActiveTab('habits')} />
-        <MobileNavButton icon={<TrendingUp />} active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
-        <MobileNavButton icon={<Binary />} active={activeTab === 'upgrades'} onClick={() => setActiveTab('upgrades')} />
+      {/* TUTORIAL MODAL OVERLAY */}
+      {tutorialStep !== null && TUTORIAL_DATA[activeTab] && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-6 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-300">
+           <div className="w-full max-w-md bg-[#0a1128]/95 border-2 border-orange-500 shadow-glow-orange rounded-[40px] p-8 flex flex-col items-center text-center space-y-6 relative">
+              <div className="w-16 h-16 bg-orange-600/10 rounded-full flex items-center justify-center border border-orange-500/30 text-orange-500 synapse-core">
+                 <BrainIcon size={32}/>
+              </div>
+              <div className="space-y-2">
+                 <h2 className="text-2xl font-black uppercase italic tracking-tighter text-orange-500">{TUTORIAL_DATA[activeTab].title}</h2>
+                 <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Passo {tutorialStep + 1} de {TUTORIAL_DATA[activeTab].steps.length}</p>
+              </div>
+              <p className="text-xl font-bold leading-tight">{TUTORIAL_DATA[activeTab].steps[tutorialStep].text}</p>
+              <div className="p-6 bg-slate-900/50 rounded-3xl border border-slate-800 w-full">
+                 <div className="flex items-center gap-2 mb-2 text-orange-400">
+                    <Lightbulb size={16}/>
+                    <span className="text-[10px] font-black uppercase tracking-tighter">Conceito Neuro-Psicossocial</span>
+                 </div>
+                 <p className="text-[11px] text-slate-300 text-left leading-relaxed">{TUTORIAL_DATA[activeTab].steps[tutorialStep].concept}</p>
+              </div>
+              <div className="flex w-full gap-4 pt-4">
+                 <button onClick={() => tutorialStep > 0 ? setTutorialStep(tutorialStep - 1) : setTutorialStep(null)} className="flex-1 py-4 rounded-2xl font-black uppercase text-[10px] border border-slate-800 hover:bg-slate-800 transition-all"> {tutorialStep === 0 ? "Fechar" : "Voltar"}</button>
+                 <button onClick={() => tutorialStep < TUTORIAL_DATA[activeTab].steps.length - 1 ? setTutorialStep(tutorialStep + 1) : setTutorialStep(null)} className="flex-1 py-4 bg-orange-600 rounded-2xl font-black uppercase text-[10px] shadow-glow-orange hover:scale-105 active:scale-95 transition-all"> {tutorialStep < TUTORIAL_DATA[activeTab].steps.length - 1 ? "Próximo" : "Finalizar"}</button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* TASK DETAIL EDITOR MODAL */}
+      {editingTask && (
+        <div className="fixed inset-0 z-[8000] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-md">
+           <div className="w-full max-w-2xl bg-[#0a1128] border border-slate-800 rounded-[48px] overflow-hidden flex flex-col max-h-[90vh]">
+              <div className="p-8 border-b border-slate-800 flex justify-between items-center bg-slate-900/30">
+                 <div className="flex items-center gap-4 text-orange-600"><Edit3 size={24}/><h2 className="text-2xl font-black uppercase italic">Andaimação Neural</h2></div>
+                 <button onClick={() => setEditingTaskId(null)} className="p-2 hover:bg-slate-800 rounded-full transition-colors"><X size={24}/></button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-10 space-y-8 no-scrollbar">
+                 <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-slate-500">Intenção da Tarefa</label>
+                    <input className="w-full bg-slate-900/50 border border-slate-800 p-4 rounded-2xl text-xl font-bold focus:border-orange-600 outline-none" value={editingTask.text} onChange={e => updateTaskDetails(editingTask.id, { text: e.target.value })} />
+                 </div>
+                 <div className="grid grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-black uppercase text-slate-500">Demanda Energética</label>
+                       <div className="flex gap-2">
+                          {['Baixa', 'Média', 'Alta'].map(ev => (
+                            <button key={ev} onClick={() => updateTaskDetails(editingTask.id, { energy: ev as any })} className={`flex-1 py-3 rounded-xl text-[9px] font-black uppercase border transition-all ${editingTask.energy === ev ? 'bg-orange-600 border-orange-500 text-white shadow-glow-orange' : 'border-slate-800 text-slate-500 hover:border-slate-700'}`}> {ev} </button>
+                          ))}
+                       </div>
+                    </div>
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-black uppercase text-slate-500">Prioridade Eisenhower</label>
+                       <div className="flex gap-2">
+                          {Object.values(Priority).map(p => (
+                            <button key={p} onClick={() => updateTaskDetails(editingTask.id, { priority: p })} className={`flex-1 py-3 rounded-xl text-[9px] font-black uppercase border transition-all ${editingTask.priority === p ? 'bg-blue-600 border-blue-500 text-white shadow-glow-blue' : 'border-slate-800 text-slate-500 hover:border-slate-700'}`}> {p} </button>
+                          ))}
+                       </div>
+                    </div>
+                 </div>
+                 <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-slate-500">Notas de Execução</label>
+                    <textarea className="w-full bg-slate-900/50 border border-slate-800 p-4 rounded-2xl min-h-[100px] text-sm focus:border-orange-600 outline-none resize-none" placeholder="Adicione detalhes, links ou contexto..." value={editingTask.notes || ""} onChange={e => updateTaskDetails(editingTask.id, { notes: e.target.value })} />
+                 </div>
+                 <div className="space-y-4">
+                    <label className="text-[10px] font-black uppercase text-slate-500">Micro-passos (Subtarefas)</label>
+                    <div className="space-y-2">
+                       {editingTask.subtasks.map((st, i) => (
+                         <div key={i} className="flex gap-2 items-center">
+                            <input className="flex-1 bg-slate-900/50 border border-slate-800 p-3 rounded-xl text-xs focus:border-blue-500 outline-none" value={st} onChange={e => { const newSt = [...editingTask.subtasks]; newSt[i] = e.target.value; updateTaskDetails(editingTask.id, { subtasks: newSt }); }} />
+                            <button onClick={() => { const newSt = editingTask.subtasks.filter((_, idx) => idx !== i); updateTaskDetails(editingTask.id, { subtasks: newSt }); }} className="p-3 text-red-500 hover:bg-red-500/10 rounded-xl transition-colors"><Trash2 size={16}/></button>
+                         </div>
+                       ))}
+                       <button onClick={() => updateTaskDetails(editingTask.id, { subtasks: [...editingTask.subtasks, ""] })} className="w-full py-3 border border-slate-800 border-dashed rounded-xl text-[10px] font-black uppercase text-slate-500 hover:text-white transition-colors flex items-center justify-center gap-2"><Plus size={14}/> Adicionar Passo</button>
+                    </div>
+                 </div>
+              </div>
+              <div className="p-8 border-t border-slate-800 flex gap-4 bg-slate-900/30">
+                 <button onClick={() => completeTask(editingTask.id)} className="flex-1 py-4 bg-green-600 rounded-2xl font-black uppercase text-xs shadow-glow-green hover:scale-105 active:scale-95 transition-all">Completar Tarefa</button>
+                 <button onClick={() => { setTasks(tasks.filter(t => t.id !== editingTask.id)); setEditingTaskId(null); }} className="px-6 py-4 bg-red-600/10 text-red-500 rounded-2xl font-black uppercase text-[10px] hover:bg-red-600 hover:text-white transition-all"><Trash2 size={20}/></button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* MOBILE NAV */}
+      <nav className="md:hidden fixed bottom-0 left-0 w-full bg-[#0a1128]/95 backdrop-blur-xl border-t border-slate-800 z-50 flex overflow-x-auto no-scrollbar px-4 py-3 gap-6">
+        <MobIcon icon={<ListTodo/>} active={activeTab === 'capture'} onClick={() => setActiveTab('capture')}/>
+        <MobIcon icon={<Timer/>} active={activeTab === 'execute'} onClick={() => setActiveTab('execute')}/>
+        <MobIcon icon={<LayoutGrid/>} active={activeTab === 'plan'} onClick={() => setActiveTab('plan')}/>
+        <MobIcon icon={<CalendarRange/>} active={activeTab === 'fixed'} onClick={() => setActiveTab('fixed')}/>
+        <MobIcon icon={<RefreshCw/>} active={activeTab === 'habits'} onClick={() => setActiveTab('habits')}/>
+        <MobIcon icon={<TrendingUp/>} active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')}/>
+        <MobIcon icon={<Binary/>} active={activeTab === 'upgrades'} onClick={() => setActiveTab('upgrades')}/>
       </nav>
 
-      {/* Guide Overlays (Reusable) */}
-      <GuideOverlay step={captureGuideStep} steps={CAPTURA_GUIDE_STEPS} onNext={() => nextGuideStep(captureGuideStep, CAPTURA_GUIDE_STEPS, setCaptureGuideStep)} onClose={() => setCaptureGuideStep(null)} />
-      <GuideOverlay step={focusGuideStep} steps={FOCUS_GUIDE_STEPS} onNext={() => nextGuideStep(focusGuideStep, FOCUS_GUIDE_STEPS, setFocusGuideStep)} onClose={() => setFocusGuideStep(null)} />
-      <GuideOverlay step={matrixGuideStep} steps={MATRIX_GUIDE_STEPS} onNext={() => nextGuideStep(matrixGuideStep, MATRIX_GUIDE_STEPS, setMatrixGuideStep)} onClose={() => setMatrixGuideStep(null)} />
+      {showHabitForm && <HabitForm habits={habits} setHabits={setHabits} setShowForm={setShowHabitForm}/>}
+      {showRecurringForm && <RecurringForm recurringTasks={recurringTasks} setRecurringTasks={setRecurringTasks} setShowForm={setShowRecurringForm}/>}
+    </div>
+  );
+};
 
-      {/* Global Tutorial */}
-      {tutorialStep !== null && (
-        <div className="fixed inset-0 z-[5000] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-2xl animate-in fade-in">
-          <div className="w-full max-w-2xl bg-[#0a1128] border border-orange-500/20 rounded-[40px] p-8 md:p-16 text-center space-y-8 shadow-3xl">
-             <div className="relative p-6 bg-slate-900/50 rounded-full border border-orange-500/20 inline-block">
-               {TUTORIAL_STEPS[tutorialStep].icon}
-             </div>
-             <div className="space-y-4">
-                <h2 className="text-2xl md:text-4xl font-black uppercase italic text-orange-500 tracking-tighter">{TUTORIAL_STEPS[tutorialStep].title}</h2>
-                <div className="bg-slate-900/80 p-6 rounded-[24px] border border-slate-800/50 text-left">
-                  <p className="text-sm text-slate-300 italic">"{TUTORIAL_STEPS[tutorialStep].theory}"</p>
-                </div>
-                <p className="text-sm md:text-base text-slate-200 font-medium">{TUTORIAL_STEPS[tutorialStep].description}</p>
-             </div>
-             <button onClick={() => { if(tutorialStep === TUTORIAL_STEPS.length-1) setTutorialStep(null); else setTutorialStep(tutorialStep+1); }} className="w-full py-5 bg-orange-600 text-white rounded-[24px] font-black uppercase tracking-widest shadow-glow-orange flex items-center justify-center gap-3 transition-all hover:scale-[1.02]">
-               {tutorialStep === TUTORIAL_STEPS.length - 1 ? "Começar" : "Próximo"} <ArrowRight size={20}/>
-             </button>
-          </div>
-        </div>
-      )}
-
-      {/* Sync Modal */}
-      {showSyncModal && (
-        <div className="fixed inset-0 z-[6000] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-xl animate-in fade-in">
-          <div className="w-full max-w-lg bg-[#0a1128] border border-blue-500/20 rounded-[40px] p-8 md:p-12 space-y-8 shadow-3xl">
-             <div className="flex justify-center"><CloudSync size={48} className="text-blue-500"/></div>
-             <div className="text-center space-y-2">
-                <h2 className="text-2xl font-black uppercase italic tracking-tighter text-blue-500">Ativar NeuroSync</h2>
-                <p className="text-slate-400 text-xs md:text-sm">Insira seu e-mail para sincronizar todos os seus neurônios digitais entre dispositivos.</p>
-             </div>
-             <form onSubmit={handleSetEmail} className="space-y-4">
-                <input type="email" placeholder="seu@email.com" required className="w-full py-4 px-6 bg-slate-900 border border-slate-800 rounded-2xl outline-none focus:border-blue-500 transition-all font-bold text-sm" value={emailInput} onChange={e => setEmailInput(e.target.value)} />
-                <button type="submit" className="w-full py-5 bg-blue-600 text-white rounded-[24px] font-black uppercase text-xs tracking-widest shadow-glow-blue">Sincronizar Agora</button>
-             </form>
-             <button onClick={() => setShowSyncModal(false)} className="w-full text-slate-500 font-bold uppercase text-[10px] tracking-widest">Fechar</button>
-          </div>
-        </div>
-      )}
-
-      {/* Habit Form */}
-      {showHabitForm && (
-        <div className="fixed inset-0 z-[6000] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-xl">
-          <form onSubmit={(e) => { e.preventDefault(); if(!habitForm.text) return; const h: Habit = { id: crypto.randomUUID(), ...habitForm, streak: 0, lastCompleted: null, completedDates: [] }; setHabits(prev => [h, ...prev]); setHabitForm({ text: '', anchor: '', tinyAction: '' }); setShowHabitForm(false); }} className="w-full max-w-lg bg-[#0a1128] border border-slate-800 rounded-[40px] p-8 md:p-12 space-y-8">
-            <h2 className="text-xl font-black text-orange-600 uppercase">Novo Hábito</h2>
-            <div className="space-y-4">
-              <input required className="w-full py-4 px-6 rounded-xl bg-slate-900 outline-none border border-slate-800 focus:border-orange-500 transition-colors text-sm" placeholder="O Hábito" value={habitForm.text} onChange={e => setHabitForm({...habitForm, text: e.target.value})} />
-              <input className="w-full py-4 px-6 rounded-xl bg-slate-900 outline-none border border-slate-800 focus:border-orange-500 transition-colors text-sm" placeholder="Eu vou..." value={habitForm.tinyAction} onChange={e => setHabitForm({...habitForm, tinyAction: e.target.value})} />
+const HabitsView = ({ habits, setHabits, setPoints, playAudio, setShowHabitForm }: any) => (
+  <div className="space-y-10 animate-in fade-in">
+    <div className="flex justify-between items-end px-4">
+      <div><h2 className="text-4xl font-black uppercase italic text-orange-600">Mielinização</h2><p className="text-[10px] font-black text-slate-500 uppercase">Repetição para automação neural.</p></div>
+      <button onClick={() => setShowHabitForm(true)} className="w-14 h-14 bg-orange-600 rounded-2xl flex items-center justify-center shadow-glow-orange"><Plus/></button>
+    </div>
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-8 px-4">
+      {habits.map((h: any) => {
+        const today = new Date().toISOString().split('T')[0];
+        const doneToday = h.lastCompleted === today;
+        return (
+          <div key={h.id} className="p-8 bg-slate-900 border border-slate-800 rounded-[48px] space-y-6">
+            <div className="flex justify-between">
+              <h4 className="text-xl font-black uppercase">{h.identity}</h4>
+              <div className="flex gap-1">
+                {Array.from({length: 3}).map((_, i) => (
+                   <div key={i} className={`w-2 h-2 rounded-full ${h.streak > i ? 'bg-orange-500 shadow-glow-orange' : 'bg-slate-800'}`}/>
+                ))}
+              </div>
             </div>
-            <button type="submit" className="w-full py-4 bg-orange-600 rounded-[20px] font-black uppercase text-xs shadow-glow-orange">Ativar</button>
-            <button type="button" onClick={() => setShowHabitForm(false)} className="w-full text-slate-500 font-bold uppercase text-[10px] tracking-widest">Voltar</button>
-          </form>
+            <p className="text-xs italic text-slate-400">"{h.text}"</p>
+            <button onClick={() => { if (h.lastCompleted === today) return; setHabits(habits.map((item: any) => item.id === h.id ? {...item, streak: item.streak + 1, lastCompleted: today} : item)); setPoints((p: number) => p + 50); playAudio(SOUNDS.HABIT_COMPLETE); }} disabled={doneToday} className={`w-full py-4 rounded-2xl font-black uppercase text-xs transition-all ${doneToday ? 'bg-green-600/10 text-green-500 border border-green-500/20' : 'bg-orange-600 shadow-glow-orange hover:scale-105 active:scale-95'}`}> {doneToday ? 'Neuralizado Hoje' : 'Reforçar Identidade'} </button>
+          </div>
+        )
+      })}
+    </div>
+  </div>
+);
+
+const FixedView = ({ recurringTasks, setRecurringTasks, currentPeriod, setPoints, setShowRecurringForm }: any) => (
+  <div className="space-y-12 animate-in fade-in">
+    <div className="flex justify-between items-end">
+      <div><h2 className="text-4xl font-black uppercase italic text-purple-400">Bio-Ciclos</h2><p className="text-[10px] font-black text-slate-500 uppercase">Sincronia circadiana.</p></div>
+      <button onClick={() => setShowRecurringForm(true)} className="w-14 h-14 bg-purple-600 rounded-2xl flex items-center justify-center shadow-glow-blue"><Plus/></button>
+    </div>
+    <div className="space-y-6">
+      {(['Morning', 'Day', 'Evening', 'Night'] as DayPeriod[]).map(p => (
+        <div key={p} className={`p-6 rounded-3xl border transition-all duration-500 ${currentPeriod === p ? 'bg-slate-900 border-purple-500 shadow-glow-blue/20' : 'bg-slate-950 opacity-40'}`}>
+          <div className="flex items-center gap-3 mb-4">
+             {p === 'Morning' && <Sunrise className="text-purple-400" size={18}/>}
+             {p === 'Day' && <Sun className="text-purple-400" size={18}/>}
+             {p === 'Evening' && <Sunset className="text-purple-400" size={18}/>}
+             {p === 'Night' && <MoonStar className="text-purple-400" size={18}/>}
+             <h3 className="font-black uppercase text-sm text-purple-400 tracking-tighter italic">{PERIOD_LABELS[p]}</h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {recurringTasks.filter((rt: any) => rt.period === p).map((rt: any) => {
+               const today = new Date().toISOString().split('T')[0];
+               const done = rt.completedDates.includes(today);
+               return (
+                <div key={rt.id} onClick={() => { setRecurringTasks(recurringTasks.map((item: any) => item.id === rt.id ? {...item, completedDates: done ? item.completedDates.filter((d: string) => d !== today) : [...item.completedDates, today]} : item)); if(!done) setPoints((p: number) => p + 25); }} className={`p-4 rounded-xl flex justify-between items-center cursor-pointer transition-all border ${done ? 'bg-slate-800/50 border-green-500/20 opacity-60' : 'bg-slate-800 border-slate-700 hover:border-purple-500'}`}>
+                  <span className={`text-xs font-bold uppercase ${done ? 'line-through text-slate-500' : ''}`}>{rt.text}</span>
+                  <div className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all ${done ? 'bg-green-600 shadow-glow-green scale-110' : 'bg-slate-900 border border-slate-700'}`}>{done && <Check size={12}/>}</div>
+                </div>
+               );
+            })}
+          </div>
         </div>
-      )}
+      ))}
     </div>
-  );
-};
-
-const MobileNavButton: React.FC<{ icon: React.ReactNode, active: boolean, onClick: () => void }> = ({ icon, active, onClick }) => (
-  <button onClick={onClick} className={`flex-shrink-0 p-4 rounded-2xl transition-all ${active ? 'bg-orange-600 text-white shadow-lg scale-110' : 'text-slate-500'}`}>
-    {icon}
-  </button>
+  </div>
 );
 
-const ArousalButton: React.FC<{ active: boolean, onClick: () => void, icon: React.ReactNode, label: string }> = ({ active, onClick, icon, label }) => (
-  <button onClick={onClick} className={`flex-1 p-3 rounded-2xl border flex flex-col items-center gap-1 transition-all ${active ? 'bg-orange-600/20 border-orange-500 text-orange-400 shadow-glow-orange animate-pulse-orange' : 'border-slate-800 opacity-40'}`}>
-    {icon}<span className="text-[8px] font-black uppercase">{label}</span>
-  </button>
+const DashboardView = ({ tasks, habits, points, achievements }: any) => (
+  <div className="space-y-10 animate-in fade-in">
+    <h2 className="text-4xl font-black uppercase italic">Dashboard Neural</h2>
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <StatCard icon={<Target/>} val={tasks.filter((t: any) => t.completed).length} label="Concluídas"/>
+      <StatCard icon={<Flame/>} val={Math.max(...habits.map((h: any) => h.streak), 0)} label="Melhor Streak"/>
+      <StatCard icon={<Gem/>} val={points} label="Neuro-XP"/>
+      <StatCard icon={<Award/>} val={achievements.filter((a: any) => a.unlockedAt).length} label="Conquistas"/>
+    </div>
+  </div>
 );
 
-const NavButton: React.FC<{ icon: React.ReactNode, label: string, active: boolean, onClick: () => void }> = ({ icon, label, active, onClick }) => (
-  <button onClick={onClick} className={`flex flex-col items-center justify-center p-4 rounded-[28px] transition-all md:flex-row md:justify-start md:gap-5 md:w-full md:px-8 md:py-5 min-w-[80px] ${active ? 'bg-orange-600 text-white shadow-2xl scale-[1.05]' : 'text-slate-500 hover:bg-slate-800/30'}`}>
-    {icon}<span className="text-[10px] mt-2 font-black uppercase md:text-sm md:mt-0 md:tracking-widest whitespace-nowrap">{label}</span>
-  </button>
-);
-
-const MatrixQuadrant: React.FC<{ priority: Priority, title: string, color: string, tasks: Task[], onSelect: (t: Task) => void, onDrop: (taskId: string, newPriority: Priority) => void, onUpdateEnergy: (id: string) => void, currentArousal: BrainCapacity }> = ({ priority, title, color, tasks, onSelect, onDrop, onUpdateEnergy, currentArousal }) => {
-  return (
-    <div className={`p-6 md:p-10 border rounded-[32px] md:rounded-[56px] ${color} min-h-[300px] transition-all group shadow-sm`}>
-      <h3 className="font-black uppercase text-[10px] tracking-[0.2em] text-slate-500 mb-6">{title}</h3>
-      <div className="space-y-3">
-        {tasks.map(t => (
-          <div key={t.id} onClick={() => onSelect(t)} className={`p-4 md:p-6 bg-slate-900 border border-orange-500/20 rounded-2xl flex justify-between items-center group cursor-pointer hover:border-orange-500/60 transition-all`}>
-            <span className="text-xs md:text-sm font-black truncate flex-1">{t.text}</span>
-            <span className="px-2 py-1 rounded-full text-[7px] font-black uppercase bg-slate-800 text-slate-400">{t.energy}</span>
-          </div>
-        ))}
-        {tasks.length === 0 && <p className="text-center py-12 text-[8px] font-black text-slate-700 uppercase opacity-30">Vazio</p>}
+const UpgradesView = ({ upgrades, points, setPoints, setUpgrades, playAudio }: any) => (
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    {upgrades.map((u: any) => (
+      <div key={u.id} className={`p-8 rounded-[40px] border ${u.unlocked ? 'border-green-500/30 bg-green-500/5' : 'bg-slate-900 border-slate-800'}`}>
+        <h4 className="font-black uppercase">{u.name}</h4>
+        <p className="text-xs text-slate-500 my-4">{u.description}</p>
+        <button disabled={u.unlocked || points < u.cost} onClick={() => { setPoints(points - u.cost); setUpgrades(upgrades.map((up: any) => up.id === u.id ? {...up, unlocked: true} : up)); playAudio(SOUNDS.UPGRADE); }} className="w-full py-4 bg-orange-600 rounded-2xl font-black uppercase text-[10px]"> {u.unlocked ? 'Integrado' : `${u.cost} XP - Sintetizar`} </button>
       </div>
-    </div>
-  );
-};
+    ))}
+  </div>
+);
 
-const GuideOverlay: React.FC<{ step: number | null, steps: any[], onNext: () => void, onClose: () => void }> = ({ step, steps, onNext, onClose }) => {
-  if (step === null) return null;
-  const current = steps[step];
-  return (
-    <div className="fixed inset-0 z-[5000] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-2xl animate-in fade-in">
-       <div className="w-full max-w-xl bg-[#0a1128] border border-orange-500/20 rounded-[40px] p-8 text-center space-y-6 shadow-3xl">
-          <div className="flex justify-center mb-2">{current.icon}</div>
-          <div className="space-y-4">
-             <h2 className="text-2xl font-black uppercase italic text-orange-500 tracking-tighter">{current.title}</h2>
-             <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800/50 text-left">
-                <p className="text-xs text-slate-300 italic leading-relaxed">"{current.theory}"</p>
-             </div>
-             <p className="text-sm text-slate-200 leading-relaxed">{current.description}</p>
-          </div>
-          <div className="flex flex-col gap-2">
-             <button onClick={onNext} className="w-full py-4 bg-orange-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest">
-               {step === steps.length - 1 ? "Entendido" : "Próximo"}
-             </button>
-             <button onClick={onClose} className="text-slate-600 uppercase text-[9px] font-black tracking-widest py-2">Pular</button>
-          </div>
-       </div>
-    </div>
-  );
-};
+const StatCard = ({ icon, val, label }: any) => (
+  <div className="p-8 bg-slate-900 border border-slate-800 rounded-[40px] flex flex-col items-center gap-2">
+    <div className="text-orange-500 mb-2">{icon}</div>
+    <span className="text-3xl font-black italic">{val}</span>
+    <span className="text-[10px] font-black uppercase text-slate-500">{label}</span>
+  </div>
+);
+
+const HabitForm = ({ habits, setHabits, setShowForm }: any) => (
+  <div className="fixed inset-0 z-[9000] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-xl">
+    <form className="w-full max-w-lg bg-[#0a1128] border border-slate-800 rounded-[40px] p-10 space-y-6" onSubmit={e => { e.preventDefault(); const target = e.target as any; const h: Habit = { id: crypto.randomUUID(), text: target.text.value, anchor: target.anchor.value, tinyAction: target.tinyAction.value, identity: target.identity.value, streak: 0, lastCompleted: null, completedDates: [] }; setHabits([h, ...habits]); setShowForm(false); }}>
+      <h2 className="text-2xl font-black uppercase text-orange-600 italic">Novo Hábito</h2>
+      <input name="identity" required className="w-full p-4 rounded-xl bg-slate-900 border border-slate-800 text-white" placeholder="Identidade (Ex: Atleta)"/>
+      <input name="text" required className="w-full p-4 rounded-xl bg-slate-900 border border-slate-800 text-white" placeholder="Ação"/>
+      <input name="anchor" required className="w-full p-4 rounded-xl bg-slate-900 border border-slate-800 text-white" placeholder="Âncora"/>
+      <input name="tinyAction" required className="w-full p-4 rounded-xl bg-slate-900 border border-slate-800 text-white" placeholder="Micro-ação"/>
+      <button type="submit" className="w-full py-5 bg-orange-600 rounded-2xl font-black">Salvar</button>
+      <button type="button" onClick={() => setShowForm(false)} className="w-full text-xs uppercase font-black text-slate-500">Cancelar</button>
+    </form>
+  </div>
+);
+
+const RecurringForm = ({ recurringTasks, setRecurringTasks, setShowForm }: any) => (
+  <div className="fixed inset-0 z-[9000] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-xl">
+    <form className="w-full max-w-lg bg-[#0a1128] border border-slate-800 rounded-[40px] p-10 space-y-6" onSubmit={e => { e.preventDefault(); const target = e.target as any; const rt: RecurringTask = { id: crypto.randomUUID(), text: target.text.value, frequency: Frequency.DAILY, priority: Priority.Q2, energy: 'Baixa', period: target.period.value, completedDates: [] }; setRecurringTasks([rt, ...recurringTasks]); setShowForm(false); }}>
+      <h2 className="text-2xl font-black uppercase text-purple-400 italic">Nova Rotina</h2>
+      <input name="text" required className="w-full p-4 rounded-xl bg-slate-900 border border-slate-800 text-white" placeholder="Tarefa Recorrente"/>
+      <select name="period" className="w-full p-4 rounded-xl bg-slate-900 border border-slate-800 font-bold text-white">
+        {Object.entries(PERIOD_LABELS).map(([val, label]) => ( <option key={val} value={val} className="bg-slate-900">{label}</option> ))}
+      </select>
+      <button type="submit" className="w-full py-5 bg-purple-600 rounded-2xl font-black">Salvar</button>
+      <button type="button" onClick={() => setShowForm(false)} className="w-full text-xs uppercase font-black text-slate-500">Cancelar</button>
+    </form>
+  </div>
+);
+
+const NavBtn: React.FC<{ icon: React.ReactNode, label: string, active: boolean, onClick: () => void }> = ({ icon, label, active, onClick }) => (
+  <button onClick={onClick} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-black uppercase text-[11px] transition-all ${active ? 'bg-orange-600 text-white shadow-lg scale-105' : 'text-slate-500 hover:bg-slate-800/30'}`}>{icon} {label}</button>
+);
+
+const MobIcon: React.FC<{ icon: React.ReactNode, active: boolean, onClick: () => void }> = ({ icon, active, onClick }) => (
+  <button onClick={onClick} className={`flex-shrink-0 p-4 rounded-2xl transition-all ${active ? 'bg-orange-600 text-white scale-110 shadow-lg' : 'text-slate-500'}`}>{icon}</button>
+);
+
+const SynapseLogo = () => (
+  <svg width="24" height="24" viewBox="0 0 32 32" fill="none">
+    <circle cx="16" cy="16" r="14" fill="currentColor" fillOpacity="0.05" /><circle cx="16" cy="16" r="6" stroke="#f97316" strokeWidth="2"/><circle cx="16" cy="16" r="3" fill="#f97316"/><path d="M16 16L26 6" stroke="#f97316" strokeWidth="2.5" strokeLinecap="round"/><circle cx="26" cy="6" r="2" fill="#ef4444"/>
+  </svg>
+);
 
 export default App;

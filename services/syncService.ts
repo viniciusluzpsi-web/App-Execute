@@ -46,7 +46,7 @@ export const syncService = {
   },
 
   async pushData(email: string, data: any) {
-    if (!email || email === 'guest@neuro.com') return false;
+    if (!email || email === 'guest@neuro.com' || !email.includes('@')) return false;
     try {
       const key = safeKey(email);
       const response = await fetch(`${BASE_URL}d_${key}`, {
@@ -64,7 +64,7 @@ export const syncService = {
   },
 
   async pullData(email: string) {
-    if (!email || email === 'guest@neuro.com') return null;
+    if (!email || email === 'guest@neuro.com' || !email.includes('@')) return null;
     try {
       const key = safeKey(email);
       const res = await fetch(`${BASE_URL}d_${key}`);
