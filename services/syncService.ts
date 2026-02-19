@@ -1,76 +1,44 @@
 
-import { User, Task, Habit, RecurringTask } from "../types";
-
-// Identificador exclusivo para evitar conflitos com outros apps no kvdb
-const BUCKET_ID = "neuro_executor_v1_production_stable_99";
-const BASE_URL = `https://kvdb.io/${BUCKET_ID}/`;
-
-// Função de hash segura para transformar e-mail em chave de URL
-function safeKey(email: string) {
-  const clean = email.toLowerCase().trim();
-  // Usando uma substituição simples para caracteres especiais para garantir compatibilidade
-  return btoa(clean).replace(/[/+=]/g, '_');
-}
+import { db } from "./firebase";
+import { doc, getDoc, setDoc, onSnapshot } from "firebase/firestore";
 
 export const syncService = {
-  async saveUser(user: any) {
+  // Escuta mudanças em tempo real para um usuário específico
+  subscribeToUserData(uid: string, callback: (data: any) => void) {
+    if (!uid) return () => {};
+    const userDocRef = doc(db, "users", uid);
+    return onSnapshot(userDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        callback(docSnap.data());
+      }
+    });
+  },
+
+  // Salva os dados do usuário no Firestore
+  async pushData(uid: string, data: any) {
+    if (!uid) return false;
     try {
-      const key = safeKey(user.email);
-      const payload = {
-        ...user,
+      const userDocRef = doc(db, "users", uid);
+      await setDoc(userDocRef, {
+        ...data,
         updatedAt: Date.now()
-      };
-      
-      const response = await fetch(`${BASE_URL}u_${key}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      return response.ok;
+      }, { merge: true });
+      return true;
     } catch (e) {
-      console.error("Sync: Falha ao salvar usuário na nuvem", e);
+      console.error("Firestore Sync Error:", e);
       return false;
     }
   },
 
-  async findUser(email: string) {
+  // Busca dados iniciais (fallback ou manual)
+  async pullData(uid: string) {
+    if (!uid) return null;
     try {
-      const key = safeKey(email);
-      const res = await fetch(`${BASE_URL}u_${key}`);
-      if (!res.ok) return null;
-      return await res.json();
+      const userDocRef = doc(db, "users", uid);
+      const docSnap = await getDoc(userDocRef);
+      return docSnap.exists() ? docSnap.data() : null;
     } catch (e) {
-      console.error("Sync: Falha ao buscar usuário", e);
-      return null;
-    }
-  },
-
-  async pushData(email: string, data: any) {
-    if (!email || email === 'guest@neuro.com' || !email.includes('@')) return false;
-    try {
-      const key = safeKey(email);
-      const response = await fetch(`${BASE_URL}d_${key}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...data,
-          updatedAt: Date.now()
-        })
-      });
-      return response.ok;
-    } catch (e) {
-      return false;
-    }
-  },
-
-  async pullData(email: string) {
-    if (!email || email === 'guest@neuro.com' || !email.includes('@')) return null;
-    try {
-      const key = safeKey(email);
-      const res = await fetch(`${BASE_URL}d_${key}`);
-      if (!res.ok) return null;
-      return await res.json();
-    } catch (e) {
+      console.error("Firestore Pull Error:", e);
       return null;
     }
   }

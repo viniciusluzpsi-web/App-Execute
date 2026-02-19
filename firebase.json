@@ -1,0 +1,19 @@
+
+{
+  "hosting": {
+    "site": "neuroexecutor-d5f83-9c89c",
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}
