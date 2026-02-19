@@ -116,11 +116,17 @@ const App: React.FC = () => {
     try { 
       await signInWithPopup(auth, googleProvider); 
     } catch (e: any) { 
-      console.error("Login Error", e);
+      console.error("Login Error Details:", e);
+      const currentDomain = window.location.hostname;
+      
       if (e.code === 'auth/configuration-not-found') {
-        setAuthError("O Provedor Google não está ativado. Vá no Console do Firebase > Authentication > Sign-in method e ative o Google.");
+        setAuthError("Erro: Provedor Google não ativado no Firebase Console.");
+      } else if (e.code === 'auth/unauthorized-domain') {
+        setAuthError(`Domínio "${currentDomain}" não autorizado no Firebase. Adicione-o em Authentication > Settings > Authorized domains.`);
+      } else if (e.code === 'auth/popup-blocked') {
+        setAuthError("O navegador bloqueou o pop-up de login. Por favor, permita pop-ups para este site.");
       } else {
-        setAuthError("Erro ao entrar: " + e.message);
+        setAuthError(`Erro na Nuvem Neural: ${e.message}`);
       }
     }
   };
@@ -274,9 +280,12 @@ const App: React.FC = () => {
            </div>
 
            {authError && (
-             <div className="p-4 bg-red-600/10 border border-red-500/20 rounded-2xl text-[10px] text-red-500 font-bold leading-relaxed uppercase">
-                <ShieldAlert size={16} className="mx-auto mb-2"/>
-                {authError}
+             <div className="p-5 bg-red-600/10 border border-red-500/20 rounded-3xl text-[10px] text-red-500 font-bold leading-relaxed uppercase space-y-3">
+                <div className="flex items-center justify-center gap-2"><ShieldAlert size={18}/> <span>Erro de Acesso</span></div>
+                <p className="theme-text-main opacity-90">{authError}</p>
+                <div className="p-3 bg-black/20 rounded-xl text-[8px] lowercase font-mono theme-text-muted">
+                  Vá em: Firebase Console > Authentication > Settings > Authorized domains e adicione {window.location.hostname}
+                </div>
              </div>
            )}
 
