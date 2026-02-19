@@ -72,44 +72,6 @@ export const geminiService = {
     }
   },
 
-  async suggestDopaMenuItem(brainState: BrainCapacity, existingItems: DopamenuItem[]): Promise<{ recommendation: string; item?: Partial<DopamenuItem> }> {
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: `O usuário está em um estado cerebral: ${brainState}. 
-        Com base no seu "Dopamenu" atual: ${JSON.stringify(existingItems.map(i => i.label))}, 
-        recomende uma atividade (pode ser uma existente ou uma nova sugestão criativa). 
-        Explique por que essa atividade ajudará a regular os níveis de dopamina agora.`,
-        config: {
-          systemInstruction: "Você é um Chef de Dopamina. Seu objetivo é sugerir a 'refeição neural' perfeita para o estado atual do usuário.",
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              recommendation: { type: Type.STRING },
-              item: {
-                type: Type.OBJECT,
-                properties: {
-                  label: { type: Type.STRING },
-                  category: { type: Type.STRING, enum: ['Starter', 'Main', 'Side', 'Dessert'] },
-                  description: { type: Type.STRING },
-                  effort: { type: Type.STRING, enum: ['Baixo', 'Médio', 'Alto'] }
-                },
-                required: ['label', 'category', 'description', 'effort']
-              }
-            },
-            required: ['recommendation', 'item']
-          }
-        }
-      });
-      return JSON.parse(response.text || '{}');
-    } catch (error) {
-      console.error(error);
-      return { recommendation: "Tente uma pausa de 5 minutos longe de telas." };
-    }
-  },
-
   async decomposeTask(taskText: string): Promise<string[]> {
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });

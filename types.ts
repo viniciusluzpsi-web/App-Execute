@@ -16,11 +16,6 @@ export enum Frequency {
 export type BrainCapacity = 'Exausto' | 'Neutro' | 'Hiperfocado';
 export type DayPeriod = 'Morning' | 'Day' | 'Evening' | 'Night';
 
-export interface SubTask {
-  text: string;
-  completed: boolean;
-}
-
 export interface Task {
   id: string;
   text: string;
@@ -50,10 +45,8 @@ export interface RecurringTask {
   text: string;
   frequency: Frequency;
   energy: 'Baixa' | 'Média' | 'Alta';
-  identity: string;
-  anchor: string; // Implementation Intention: "Quando X, eu faço Y"
-  subtasks: string[]; // Ritual steps
-  streak: number;
+  anchor: string; 
+  description: string;
   lastCompleted: string | null;
   completedDates: string[];
 }
@@ -74,14 +67,13 @@ export interface DopamenuItem {
   effort: 'Baixo' | 'Médio' | 'Alto';
 }
 
-export interface Upgrade {
+export interface Reward {
   id: string;
   name: string;
   cost: number;
-  unlocked: boolean;
   description: string;
   icon: string;
-  category: 'Foco' | 'Energia' | 'Dopamina' | 'Recuperação';
+  redemptions: number;
 }
 
 export interface Achievement {
