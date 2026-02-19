@@ -16,17 +16,8 @@ export enum Frequency {
 export type BrainCapacity = 'Exausto' | 'Neutro' | 'Hiperfocado';
 export type DayPeriod = 'Morning' | 'Day' | 'Evening' | 'Night';
 
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-}
-
-export interface TimeboxEntry {
-  id: string;
-  start: string;
-  end: string;
-  activity: string;
+export interface SubTask {
+  text: string;
   completed: boolean;
 }
 
@@ -35,24 +26,12 @@ export interface Task {
   text: string;
   priority: Priority;
   energy: 'Baixa' | 'Média' | 'Alta';
-  capacityNeeded: BrainCapacity; 
+  capacityNeeded: BrainCapacity;
   completed: boolean;
   subtasks: string[];
-  notes?: string; 
   date: string;
   createdAt: number;
-  isRefining?: boolean; // Indica que a IA ainda está processando os detalhes
-}
-
-export interface RecurringTask {
-  id: string;
-  text: string;
-  frequency: Frequency;
-  priority: Priority;
-  energy: 'Baixa' | 'Média' | 'Alta';
-  completedDates: string[]; 
-  period?: DayPeriod; 
-  weekDays?: number[]; // 0=Dom, 1=Seg, ..., 6=Sab
+  isRefining?: boolean;
 }
 
 export interface Habit {
@@ -60,36 +39,55 @@ export interface Habit {
   text: string;
   anchor: string;
   tinyAction: string;
-  identity?: string; 
+  identity: string;
   streak: number;
   lastCompleted: string | null;
-  completedDates: string[]; 
+  completedDates: string[];
+}
+
+export interface RecurringTask {
+  id: string;
+  text: string;
+  frequency: Frequency;
+  energy: 'Baixa' | 'Média' | 'Alta';
+  identity: string;
+  anchor: string; // Implementation Intention: "Quando X, eu faço Y"
+  subtasks: string[]; // Ritual steps
+  streak: number;
+  lastCompleted: string | null;
+  completedDates: string[];
+}
+
+export interface TimeboxEntry {
+  id: string;
+  activity: string;
+  start: string;
+  end: string;
+  completed: boolean;
 }
 
 export interface DopamenuItem {
   id: string;
-  category: 'Starter' | 'Main' | 'Side' | 'Dessert';
   label: string;
+  category: 'Starter' | 'Main' | 'Side' | 'Dessert';
   description: string;
   effort: 'Baixo' | 'Médio' | 'Alto';
-  duration?: string;
-  iconName?: string;
 }
 
 export interface Upgrade {
   id: string;
   name: string;
-  description: string;
   cost: number;
   unlocked: boolean;
-  category: 'Focus' | 'AI' | 'Visual' | 'Energy';
+  description: string;
   icon: string;
+  category: 'Foco' | 'Energia' | 'Dopamina' | 'Recuperação';
 }
 
 export interface Achievement {
   id: string;
-  title: string;
+  name: string;
   description: string;
   icon: string;
-  unlockedAt: number | null;
+  unlocked: boolean;
 }
