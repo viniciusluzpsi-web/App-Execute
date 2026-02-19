@@ -284,7 +284,7 @@ const App: React.FC = () => {
                 <div className="flex items-center justify-center gap-2"><ShieldAlert size={18}/> <span>Erro de Acesso</span></div>
                 <p className="theme-text-main opacity-90">{authError}</p>
                 <div className="p-3 bg-black/20 rounded-xl text-[8px] lowercase font-mono theme-text-muted">
-                  Vá em: Firebase Console > Authentication > Settings > Authorized domains e adicione {window.location.hostname}
+                  Vá em: Firebase Console → Authentication → Settings → Authorized domains e adicione {window.location.hostname}
                 </div>
              </div>
            )}
